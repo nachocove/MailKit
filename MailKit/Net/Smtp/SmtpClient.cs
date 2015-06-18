@@ -1694,10 +1694,5 @@ namespace MailKit.Net.Smtp {
 				Disconnect ();
 			}
 		}
-
-        public IProtocolLogger Logger()
-        {
-            return logger;
-        }
 	}
 }
