@@ -31,39 +31,43 @@ using System.Collections.Generic;
 
 namespace MailKit {
 	/// <summary>
-	/// A set of <see cref="UniqueId"/> items.
+	/// A set of unique identifiers.
 	/// </summary>
 	/// <remarks>
-	/// When dealing with a large number of unique ids, it may be more efficient to use a
+	/// When dealing with a large number of unique identifiers, it may be more efficient to use a
 	/// <see cref="UniqueIdSet"/> than a typical IList&lt;<see cref="UniqueId"/>&gt;.
 	/// </remarks>
 	public class UniqueIdSet : IList<UniqueId>
 	{
 		readonly List<UniqueIdRange> ranges;
-		bool isReadOnly;
+		bool isReadOnly, sorted;
 		long count;
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MailKit.UniqueIdSet"/> class.
 		/// </summary>
 		/// <remarks>
-		/// Creates a new unique id set.
+		/// Creates a new unique identifier set.
 		/// </remarks>
-		public UniqueIdSet ()
+		/// <param name="sort"><c>true</c> if unique identifiers should be sorted; otherwise, <c>false</c>.</param>
+		public UniqueIdSet (bool sort = false)
 		{
 			ranges = new List<UniqueIdRange> ();
+			sorted = sort;
 		}
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MailKit.UniqueIdSet"/> class.
 		/// </summary>
 		/// <remarks>
-		/// Creates a new unique id set containing the specified uids.
+		/// Creates a new set of unique identifier set containing the specified uids.
 		/// </remarks>
 		/// <param name="uids">An initial set of unique ids.</param>
-		public UniqueIdSet (IEnumerable<UniqueId> uids)
+		/// <param name="sort"><c>true</c> if unique identifiers should be sorted; otherwise, <c>false</c>.</param>
+		public UniqueIdSet (IEnumerable<UniqueId> uids, bool sort = false)
 		{
 			ranges = new List<UniqueIdRange> ();
+			sorted = sort;
 
 			foreach (var uid in uids)
 				Add (uid);
@@ -103,8 +107,8 @@ namespace MailKit {
 			do {
 				int i = min + ((max - min) / 2);
 
-				if (uid >= ranges[i].Min) {
-					if (uid <= ranges[i].Max)
+				if (uid >= ranges[i].Start) {
+					if (uid <= ranges[i].End)
 						return i;
 
 					min = i + 1;
@@ -112,6 +116,19 @@ namespace MailKit {
 					max = i;
 				}
 			} while (min < max);
+
+			return -1;
+		}
+
+		int IndexOfRange (UniqueId uid)
+		{
+			if (sorted)
+				return BinarySearch (uid);
+
+			for (int i = 0; i < ranges.Count; i++) {
+				if (ranges[i].Contains (uid))
+					return i;
+			}
 
 			return -1;
 		}
@@ -130,20 +147,20 @@ namespace MailKit {
 			do {
 				i = min + ((max - min) / 2);
 
-				if (uid >= ranges[i].Min) {
-					if (uid <= ranges[i].Max)
+				if (uid >= ranges[i].Start) {
+					if (uid <= ranges[i].End)
 						return;
 
-					if (uid.Id == ranges[i].Max.Id + 1) {
-						if (i + 1 < ranges.Count && uid.Id + 1 >= ranges[i + 1].Min.Id) {
+					if (uid.Id == ranges[i].End.Id + 1) {
+						if (i + 1 < ranges.Count && uid.Id + 1 >= ranges[i + 1].Start.Id) {
 							// merge the 2 ranges together
-							ranges[i].Max = ranges[i + 1].Max;
+							ranges[i].End = ranges[i + 1].End;
 							ranges.RemoveAt (i + 1);
 							count++;
 							return;
 						}
 
-						ranges[i].Max = uid;
+						ranges[i].End = uid;
 						count++;
 						return;
 					}
@@ -151,16 +168,16 @@ namespace MailKit {
 					min = i + 1;
 					i = min;
 				} else {
-					if (uid.Id == ranges[i].Min.Id - 1) {
-						if (i > 0 && uid.Id - 1 <= ranges[i - 1].Max.Id) {
+					if (uid.Id == ranges[i].Start.Id - 1) {
+						if (i > 0 && uid.Id - 1 <= ranges[i - 1].End.Id) {
 							// merge the 2 ranges together
-							ranges[i - 1].Max = ranges[i].Max;
+							ranges[i - 1].End = ranges[i].End;
 							ranges.RemoveAt (i);
 							count++;
 							return;
 						}
 
-						ranges[i].Min = uid;
+						ranges[i].Start = uid;
 						count++;
 						return;
 					}
@@ -179,13 +196,44 @@ namespace MailKit {
 			count++;
 		}
 
+		void Append (UniqueId uid)
+		{
+			if (Contains (uid))
+				return;
+
+			count++;
+
+			if (ranges.Count > 0) {
+				var range = ranges[ranges.Count - 1];
+
+				if (range.Start == range.End) {
+					if (uid.Id == range.End.Id + 1 || uid.Id == range.End.Id - 1) {
+						range.End = uid;
+						return;
+					}
+				} else if (range.Start < range.End) {
+					if (uid.Id == range.End.Id + 1) {
+						range.End = uid;
+						return;
+					}
+				} else if (range.Start > range.End) {
+					if (uid.Id == range.End.Id - 1) {
+						range.End = uid;
+						return;
+					}
+				}
+			}
+
+			ranges.Add (new UniqueIdRange (uid, uid));
+		}
+
 		/// <summary>
-		/// Adds the unique id to the set.
+		/// Adds the unique identifier to the set.
 		/// </summary>
 		/// <remarks>
-		/// Adds the unique id to the set.
+		/// Adds the unique identifier to the set.
 		/// </remarks>
-		/// <param name="uid">The unique id to add.</param>
+		/// <param name="uid">The unique identifier to add.</param>
 		/// <exception cref="System.InvalidOperationException">
 		/// The collection is readonly.
 		/// </exception>
@@ -194,7 +242,10 @@ namespace MailKit {
 			if (IsReadOnly)
 				throw new InvalidOperationException ("The collection is readonly.");
 
-			BinaryInsert (uid);
+			if (sorted)
+				BinaryInsert (uid);
+			else
+				Append (uid);
 		}
 
 		/// <summary>
@@ -215,8 +266,12 @@ namespace MailKit {
 			if (IsReadOnly)
 				throw new InvalidOperationException ("The collection is readonly");
 
-			foreach (var uid in uids)
-				BinaryInsert (uid);
+			foreach (var uid in uids) {
+				if (sorted)
+					BinaryInsert (uid);
+				else
+					Append (uid);
+			}
 		}
 
 		/// <summary>
@@ -243,11 +298,11 @@ namespace MailKit {
 		/// <remarks>
 		/// Determines whether or not the set contains the specified unique id.
 		/// </remarks>
-		/// <returns><value>true</value> if the specified unique id is in the set; otherwise <value>false</value>.</returns>
+		/// <returns><value>true</value> if the specified unique identifier is in the set; otherwise <value>false</value>.</returns>
 		/// <param name="uid">The unique id.</param>
 		public bool Contains (UniqueId uid)
 		{
-			return BinarySearch (uid) != -1;
+			return IndexOfRange (uid) != -1;
 		}
 
 		/// <summary>
@@ -276,43 +331,53 @@ namespace MailKit {
 			int index = arrayIndex;
 
 			for (int i = 0; i < ranges.Count; i++) {
-				for (uint uid = ranges[i].Min.Id; uid <= ranges[i].Max.Id; uid++, index++)
-					array[index] = new UniqueId (uid);
+				foreach (var uid in ranges[i])
+					array[index] = uid;
 			}
 		}
 
 		void Remove (int index, UniqueId uid)
 		{
-			if (uid == ranges[index].Min) {
+			var range = ranges[index];
+
+			if (uid == range.Start) {
 				// remove the first item in the range
-				if (ranges[index].Min < ranges[index].Max)
-					ranges[index].Min = new UniqueId (uid.Id + 1);
-				else
+				if (range.Start != range.End) {
+					if (range.Start <= range.End)
+						range.Start = new UniqueId (uid.Id + 1);
+					else
+						range.Start = new UniqueId (uid.Id - 1);
+				} else {
 					ranges.RemoveAt (index);
-			} else if (uid == ranges[index].Max) {
+				}
+			} else if (uid == range.End) {
 				// remove the last item in the range
-				ranges[index].Max = new UniqueId (uid.Id - 1);
+				if (range.Start <= range.End)
+					range.End = new UniqueId (uid.Id - 1);
+				else
+					range.End = new UniqueId (uid.Id + 1);
 			} else {
 				// remove a uid from the middle of the range
-				var min = new UniqueId (uid.Id + 1);
-				var max = new UniqueId (uid.Id - 1);
-
-				var range = new UniqueIdRange (ranges[index].Min, max);
-				ranges.Insert (index, range);
-				ranges[index + 1].Min = min;
+				if (range.Start < range.End) {
+					ranges.Insert (index, new UniqueIdRange (range.Start, new UniqueId (uid.Id - 1)));
+					range.Start = new UniqueId (uid.Id + 1);
+				} else {
+					ranges.Insert (index, new UniqueIdRange (range.Start, new UniqueId (uid.Id + 1)));
+					range.Start = new UniqueId (uid.Id - 1);
+				}
 			}
 
 			count--;
 		}
 
 		/// <summary>
-		/// Removes the unique id from the set.
+		/// Removes the unique identifier from the set.
 		/// </summary>
 		/// <remarks>
-		/// Removes the unique id from the set.
+		/// Removes the unique identifier from the set.
 		/// </remarks>
-		/// <returns><value>true</value> if the unique id was removed; otherwise <value>false</value>.</returns>
-		/// <param name="uid">The unique id to remove.</param>
+		/// <returns><value>true</value> if the unique identifier was removed; otherwise <value>false</value>.</returns>
+		/// <param name="uid">The unique identifier to remove.</param>
 		/// <exception cref="System.InvalidOperationException">
 		/// The collection is readonly.
 		/// </exception>
@@ -321,7 +386,7 @@ namespace MailKit {
 			if (IsReadOnly)
 				throw new InvalidOperationException ("The collection is readonly");
 
-			int index = BinarySearch (uid);
+			int index = IndexOfRange (uid);
 
 			if (index == -1)
 				return false;
@@ -348,7 +413,7 @@ namespace MailKit {
 			int index = 0;
 
 			for (int i = 0; i < ranges.Count; i++) {
-				if (uid >= ranges[i].Min && uid <= ranges[i].Max)
+				if (ranges[i].Contains (uid))
 					return index + ranges[i].IndexOf (uid);
 
 				index += ranges[i].Count;
@@ -358,10 +423,10 @@ namespace MailKit {
 		}
 
 		/// <summary>
-		/// Inserts the specified unique id at the given index.
+		/// Inserts the specified unique identifier at the given index.
 		/// </summary>
 		/// <remarks>
-		/// Inserts the unique id at the specified index in the set.
+		/// Inserts the unique identifier at the specified index in the set.
 		/// </remarks>
 		/// <param name="index">The index to insert the unique id.</param>
 		/// <param name="uid">The unique id.</param>
@@ -374,10 +439,10 @@ namespace MailKit {
 		}
 
 		/// <summary>
-		/// Removes the unique id at the specified index.
+		/// Removes the unique identifier at the specified index.
 		/// </summary>
 		/// <remarks>
-		/// Removes the unique id at the specified index.
+		/// Removes the unique identifier at the specified index.
 		/// </remarks>
 		/// <param name="index">The index.</param>
 		/// <exception cref="System.ArgumentOutOfRangeException">
@@ -388,7 +453,7 @@ namespace MailKit {
 		/// </exception>
 		public void RemoveAt (int index)
 		{
-			if (index < 0)
+			if (index < 0 || index >= count)
 				throw new ArgumentOutOfRangeException ("index");
 
 			if (IsReadOnly)
@@ -406,17 +471,15 @@ namespace MailKit {
 				Remove (i, uid);
 				return;
 			}
-
-			throw new ArgumentOutOfRangeException ("index");
 		}
 
 		/// <summary>
-		/// Gets or sets the unique id at the specified index.
+		/// Gets or sets the unique identifier at the specified index.
 		/// </summary>
 		/// <remarks>
-		/// Gets or sets the unique id at the specified index.
+		/// Gets or sets the unique identifier at the specified index.
 		/// </remarks>
-		/// <value>The unique id at the specified index.</value>
+		/// <value>The unique identifier at the specified index.</value>
 		/// <param name="index">The index.</param>
 		/// <exception cref="System.ArgumentOutOfRangeException">
 		/// <paramref name="index"/> is out of range.
@@ -426,7 +489,7 @@ namespace MailKit {
 		/// </exception>
 		public UniqueId this [int index] {
 			get {
-				if (index < 0)
+				if (index < 0 || index >= count)
 					throw new ArgumentOutOfRangeException ("index");
 
 				int offset = 0;
@@ -508,6 +571,79 @@ namespace MailKit {
 		}
 
 		/// <summary>
+		/// Format a generic list of unique identifiers as a string.
+		/// </summary>
+		/// <remarks>
+		/// Formats a generic list of unique identifiers as a string.
+		/// </remarks>
+		/// <returns>The string representation of the collection of unique identifiers.</returns>
+		/// <param name="uids">The unique identifiers.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <paramref name="uids"/> is <c>null</c>.
+		/// </exception>
+		/// <exception cref="System.ArgumentException">
+		/// One or more of the unique identifiers is invalid (has a value of <c>0</c>).
+		/// </exception>
+		public static string ToString (IList<UniqueId> uids)
+		{
+			if (uids == null)
+				throw new ArgumentNullException ("uids");
+
+			if (uids.Count == 0)
+				return string.Empty;
+
+			var range = uids as UniqueIdRange;
+			if (range != null)
+				return range.ToString ();
+
+			var set = uids as UniqueIdSet;
+			if (set != null)
+				return set.ToString ();
+
+			var builder = new StringBuilder ();
+			int index = 0;
+
+			while (index < uids.Count) {
+				if (uids[index].Id == 0)
+					throw new ArgumentException ("One or more of the uids is invalid.", "uids");
+
+				uint start = uids[index].Id;
+				uint end = uids[index].Id;
+				int i = index + 1;
+
+				if (i < uids.Count) {
+					if (uids[i].Id == end + 1) {
+						end = uids[i++].Id;
+
+						while (i < uids.Count && uids[i].Id == end + 1) {
+							end++;
+							i++;
+						}
+					} else if (uids[i].Id == end - 1) {
+						end = uids[i++].Id;
+
+						while (i < uids.Count && uids[i].Id == end - 1) {
+							end--;
+							i++;
+						}
+					}
+				}
+
+				if (builder.Length > 0)
+					builder.Append (',');
+
+				if (start != end)
+					builder.AppendFormat ("{0}:{1}", start, end);
+				else
+					builder.Append (start.ToString ());
+
+				index = i;
+			}
+
+			return builder.ToString ();
+		}
+
+		/// <summary>
 		/// Attempt to parse the specified token as a set of unique identifiers.
 		/// </summary>
 		/// <remarks>
@@ -525,17 +661,17 @@ namespace MailKit {
 			if (token == null)
 				throw new ArgumentNullException ("token");
 
-			uids = new UniqueIdSet { isReadOnly = true };
+			uids = new UniqueIdSet { isReadOnly = true, sorted = false };
 
-			UniqueId uid0, uid1;
+			UniqueId start, end;
 			int index = 0;
 
 			do {
-				if (!UniqueId.TryParse (token, ref index, validity, out uid0))
+				if (!UniqueId.TryParse (token, ref index, validity, out start))
 					return false;
 
 				if (index >= token.Length) {
-					uids.ranges.Add (new UniqueIdRange (uid0, uid0));
+					uids.ranges.Add (new UniqueIdRange (start, start));
 					uids.count++;
 					return true;
 				}
@@ -543,14 +679,14 @@ namespace MailKit {
 				if (token[index] == ':') {
 					index++;
 
-					if (!UniqueId.TryParse (token, ref index, validity, out uid1))
+					if (!UniqueId.TryParse (token, ref index, validity, out end))
 						return false;
 
-					var range = new UniqueIdRange (uid0, uid1);
+					var range = new UniqueIdRange (start, end);
 					uids.count += range.Count;
 					uids.ranges.Add (range);
 				} else {
-					uids.ranges.Add (new UniqueIdRange (uid0, uid0));
+					uids.ranges.Add (new UniqueIdRange (start, start));
 					uids.count++;
 				}
 
