@@ -56,6 +56,11 @@ namespace MailKit.Security {
 		/// </remarks>
 		/// <param name="uri">The URI of the service.</param>
 		/// <param name="credentials">The user's credentials.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="uri"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
+		/// </exception>
 		public SaslMechanismCramMd5 (Uri uri, ICredentials credentials) : base (uri, credentials)
 		{
 		}
@@ -85,7 +90,7 @@ namespace MailKit.Security {
 		/// The SASL mechanism is already authenticated.
 		/// </exception>
 		/// <exception cref="System.NotSupportedException">
-		/// THe SASL mechanism does not support SASL-IR.
+		/// The SASL mechanism does not support SASL-IR.
 		/// </exception>
 		/// <exception cref="SaslException">
 		/// An error has occurred while parsing the server's challenge token.

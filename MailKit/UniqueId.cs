@@ -37,6 +37,14 @@ namespace MailKit {
 	public struct UniqueId : IComparable<UniqueId>, IEquatable<UniqueId>
 	{
 		/// <summary>
+		/// The invalid <see cref="UniqueId"/> value.
+		/// </summary>
+		/// <remarks>
+		/// The invalid <see cref="UniqueId"/> value.
+		/// </remarks>
+		public static readonly UniqueId Invalid = new UniqueId (0);
+
+		/// <summary>
 		/// The minimum <see cref="UniqueId"/> value.
 		/// </summary>
 		/// <remarks>
@@ -93,6 +101,17 @@ namespace MailKit {
 		{
 			Validity = 0;
 			Id = id;
+		}
+
+		/// <summary>
+		/// Gets whether or not the unique identifier is valid.
+		/// </summary>
+		/// <remarks>
+		/// Gets whether or not the unique identifier is valid.
+		/// </remarks>
+		/// <value><c>true</c> if the unique identifier is valid; otherwise, <c>false</c>.</value>
+		public bool IsValid {
+			get { return Id != 0; }
 		}
 
 		#region IComparable implementation

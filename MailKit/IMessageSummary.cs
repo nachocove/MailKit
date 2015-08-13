@@ -39,7 +39,7 @@ namespace MailKit {
 	/// The properties of the <see cref="IMessageSummary"/> that will be available
 	/// depend on the <see cref="MessageSummaryItems"/> passed to the aformentioned method.
 	/// </remarks>
-	public interface IMessageSummary : IThreadable, ISortable
+	public interface IMessageSummary
 	{
 		/// <summary>
 		/// Get a bitmask of fields that have been populated.
@@ -65,6 +65,58 @@ namespace MailKit {
 		BodyPart Body { get; }
 
 		/// <summary>
+		/// Gets the text body part of the message if it exists.
+		/// </summary>
+		/// <remarks>
+		/// <para>Gets the text/plain body part of the message.</para>
+		/// <para>In order for this to work properly, it is necessary to include
+		/// <see cref="MessageSummaryItems.BodyStructure"/> when fetching
+		/// summary information from a <see cref="IMailFolder"/>.</para>
+		/// </remarks>
+		/// <value>The text body if it exists; otherwise, <c>null</c>.</value>
+		BodyPartText TextBody { get; }
+
+		/// <summary>
+		/// Gets the html body part of the message if it exists.
+		/// </summary>
+		/// <remarks>
+		/// <para>Gets the text/html body part of the message.</para>
+		/// <para>In order for this to work properly, it is necessary to include
+		/// <see cref="MessageSummaryItems.BodyStructure"/> when fetching
+		/// summary information from a <see cref="IMailFolder"/>.</para>
+		/// </remarks>
+		/// <value>The html body if it exists; otherwise, <c>null</c>.</value>
+		BodyPartText HtmlBody { get; }
+
+		/// <summary>
+		/// Gets the body parts of the message.
+		/// </summary>
+		/// <remarks>
+		/// <para>Traverses over the <see cref="Body"/>, enumerating all of the
+		/// <see cref="BodyPartBasic"/> objects.</para>
+		/// <para>In order for this to work, it is necessary to include
+		/// <see cref="MessageSummaryItems.BodyStructure"/> or
+		/// <see cref="MessageSummaryItems.Body"/> when fetching
+		/// summary information from a <see cref="IMailFolder"/>.</para>
+		/// </remarks>
+		/// <value>The body parts.</value>
+		IEnumerable<BodyPartBasic> BodyParts { get; }
+
+		/// <summary>
+		/// Gets the attachments.
+		/// </summary>
+		/// <remarks>
+		/// <para>Traverses over the <see cref="Body"/>, enumerating all of the
+		/// <see cref="BodyPartBasic"/> objects that have a Content-Disposition
+		/// header set to <c>"attachment"</c>.</para>
+		/// <para>In order for this to work properly, it is necessary to include
+		/// <see cref="MessageSummaryItems.BodyStructure"/> when fetching
+		/// summary information from a <see cref="IMailFolder"/>.</para>
+		/// </remarks>
+		/// <value>The attachments.</value>
+		IEnumerable<BodyPartBasic> Attachments { get; }
+
+		/// <summary>
 		/// Gets the envelope of the message, if available.
 		/// </summary>
 		/// <remarks>
@@ -79,6 +131,35 @@ namespace MailKit {
 		/// </remarks>
 		/// <value>The envelope of the message.</value>
 		Envelope Envelope { get; }
+
+		/// <summary>
+		/// Gets the normalized subject.
+		/// </summary>
+		/// <remarks>
+		/// <para>A normalized Subject header value where prefixes such as "Re:", "Re[#]:", etc have been pruned.</para>
+		/// <para>This property is typically used for threading messages by subject.</para>
+		/// </remarks>
+		/// <value>The normalized subject.</value>
+		string NormalizedSubject { get; }
+
+		/// <summary>
+		/// Gets the Date header value.
+		/// </summary>
+		/// <remarks>
+		/// Gets the Date header value. If the Date header is not present, the arrival date is used.
+		/// If neither are known, <see cref="System.DateTimeOffset.MinValue"/> is returned.
+		/// </remarks>
+		/// <value>The date.</value>
+		DateTimeOffset Date { get; }
+
+		/// <summary>
+		/// Gets whether or not the message is a reply.
+		/// </summary>
+		/// <remarks>
+		/// This value should be based on whether the message subject contained any "Re:" or "Fwd:" prefixes.
+		/// </remarks>
+		/// <value><c>true</c> if the message is a reply; otherwise, <c>false</c>.</value>
+		bool IsReply { get; }
 
 		/// <summary>
 		/// Gets the message flags, if available.
@@ -138,7 +219,7 @@ namespace MailKit {
 		/// <see cref="IMailFolder.Fetch(System.Collections.Generic.IList&lt;UniqueId&gt;,MessageSummaryItems,System.Threading.CancellationToken)"/>.</para>
 		/// </remarks>
 		/// <value>The size of the message.</value>
-		uint? MessageSize { get; }
+		uint? Size { get; }
 
 		/// <summary>
 		/// Gets the mod-sequence value for the message, if available.
@@ -165,16 +246,16 @@ namespace MailKit {
 		MessageIdList References { get; }
 
 		/// <summary>
-		/// Gets the unique ID of the message, if available.
+		/// Gets the unique identifier of the message, if available.
 		/// </summary>
 		/// <remarks>
-		/// <para>Gets the unique ID of the message, if available.</para>
+		/// <para>Gets the unique identifier of the message, if available.</para>
 		/// <para>This property will only be set if the
 		/// <see cref="MessageSummaryItems.UniqueId"/> flag is passed to
 		/// <see cref="IMailFolder.Fetch(System.Collections.Generic.IList&lt;UniqueId&gt;,MessageSummaryItems,System.Threading.CancellationToken)"/>.</para>
 		/// </remarks>
 		/// <value>The uid of the message.</value>
-		UniqueId? UniqueId { get; }
+		UniqueId UniqueId { get; }
 
 		/// <summary>
 		/// Gets the index of the message.

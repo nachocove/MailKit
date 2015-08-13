@@ -72,13 +72,6 @@ namespace MailKit.Net.Imap {
 		Error
 	}
 
-	enum ImapCommandResult {
-		None,
-		Ok,
-		No,
-		Bad
-	}
-
 	enum ImapLiteralType {
 		String,
 		Stream,
@@ -228,7 +221,9 @@ namespace MailKit.Net.Imap {
 		/// <param name="action">The progress update action.</param>
 		public ImapLiteral (FormatOptions options, object literal, Action<int> action = null)
 		{
-			format = options;
+			format = options.Clone ();
+			format.NewLineFormat = NewLineFormat.Dos;
+
 			update = action;
 
 			if (literal is MimeMessage) {
@@ -343,11 +338,11 @@ namespace MailKit.Net.Imap {
 		public ImapContinuationHandler ContinuationHandler { get; set; }
 		public CancellationToken CancellationToken { get; private set; }
 		public ImapCommandStatus Status { get; internal set; }
-		public ImapCommandResult Result { get; internal set; }
+		public ImapCommandResponse Response { get; internal set; }
 		public ITransferProgress Progress { get; internal set; }
 		public Exception Exception { get; internal set; }
 		public readonly List<ImapResponseCode> RespCodes;
-		public string ResultText { get; internal set; }
+		public string ResponseText { get; internal set; }
 		public ImapFolder Folder { get; private set; }
 		public object UserData { get; internal set; }
 		public string Tag { get; private set; }
@@ -376,8 +371,8 @@ namespace MailKit.Net.Imap {
 			UntaggedHandlers = new Dictionary<string, ImapUntaggedHandler> ();
 			RespCodes = new List<ImapResponseCode> ();
 			CancellationToken = cancellationToken;
+			Response = ImapCommandResponse.None;
 			Status = ImapCommandStatus.Created;
-			Result = ImapCommandResult.None;
 			Engine = engine;
 			Folder = folder;
 
@@ -587,7 +582,7 @@ namespace MailKit.Net.Imap {
 			var supportsLiteralPlus = (Engine.Capabilities & ImapCapabilities.LiteralPlus) != 0;
 			int timeout = Engine.Stream.CanTimeout ? Engine.Stream.ReadTimeout : -1;
 			var idle = UserData as ImapIdleContext;
-			var result = ImapCommandResult.None;
+			var result = ImapCommandResponse.None;
 			ImapToken token;
 
 			// construct and write the command tag if this is the initial state
@@ -669,9 +664,9 @@ namespace MailKit.Net.Imap {
 						string atom = (string) token.Value;
 
 						switch (atom) {
-						case "BAD": result = ImapCommandResult.Bad; break;
-						case "OK": result = ImapCommandResult.Ok; break;
-						case "NO": result = ImapCommandResult.No; break;
+						case "BAD": result = ImapCommandResponse.Bad; break;
+						case "OK": result = ImapCommandResponse.Ok; break;
+						case "NO": result = ImapCommandResponse.No; break;
 						default: throw ImapEngine.UnexpectedToken (token, false);
 						}
 
@@ -707,9 +702,9 @@ namespace MailKit.Net.Imap {
 			if (Status == ImapCommandStatus.Active) {
 				current++;
 
-				if (current >= parts.Count || result != ImapCommandResult.None) {
+				if (current >= parts.Count || result != ImapCommandResponse.None) {
 					Status = ImapCommandStatus.Complete;
-					Result = result;
+					Response = result;
 					return false;
 				}
 			}

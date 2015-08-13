@@ -36,6 +36,7 @@ using System.Collections.ObjectModel;
 
 using MimeKit;
 using MimeKit.IO;
+using MimeKit.Utils;
 using MailKit.Search;
 
 namespace MailKit.Net.Imap {
@@ -132,10 +133,15 @@ namespace MailKit.Net.Imap {
 			}
 		}
 
-		void ParentFolderRenamed (object sender, FolderRenamedEventArgs e)
+		/// <summary>
+		/// Notifies the folder that a parent folder has been renamed.
+		/// </summary>
+		/// <remarks>
+		/// Updates the <see cref="FullName"/> property.
+		/// </remarks>
+		protected override void OnParentFolderRenamed ()
 		{
 			var oldEncodedName = EncodedName;
-			var oldFullName = FullName;
 
 			FullName = ParentFolder.FullName + DirectorySeparator + Name;
 			EncodedName = Engine.EncodeMailboxName (FullName);
@@ -146,15 +152,8 @@ namespace MailKit.Net.Imap {
 				Engine.State = ImapEngineState.Authenticated;
 				Access = FolderAccess.None;
 				Engine.Selected = null;
+				OnClosed ();
 			}
-
-			OnRenamed (oldFullName, FullName);
-		}
-
-		internal void SetParentFolder (IMailFolder parent)
-		{
-			parent.Renamed += ParentFolderRenamed;
-			ParentFolder = parent;
 		}
 
 		void ProcessResponseCodes (ImapCommand ic, IMailFolder folder)
@@ -275,7 +274,7 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="ImapCommandException">
 		/// The server replied with a NO or BAD response.
 		/// </exception>
-		public override FolderAccess Open (FolderAccess access, UniqueId uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken))
+		public override FolderAccess Open (FolderAccess access, uint uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken))
 		{
 			var set = ImapUtils.FormatUidSet (uids);
 
@@ -293,7 +292,7 @@ namespace MailKit.Net.Imap {
 			if (!Engine.QResyncEnabled)
 				throw new InvalidOperationException ("The QRESYNC extension has not been enabled.");
 
-			var qresync = string.Format ("(QRESYNC ({0} {1}", uidValidity.Id, highestModSeq);
+			var qresync = string.Format ("(QRESYNC ({0} {1}", uidValidity, highestModSeq);
 
 			if (uids.Count > 0)
 				qresync += " " + set;
@@ -318,7 +317,7 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, this);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create (access == FolderAccess.ReadOnly ? "EXAMINE" : "SELECT", ic);
 			} catch {
 				PermanentFlags = MessageFlags.None;
@@ -326,13 +325,19 @@ namespace MailKit.Net.Imap {
 			}
 
 			if (Engine.Selected != null && Engine.Selected != this) {
-				Engine.Selected.PermanentFlags = MessageFlags.None;
-				Engine.Selected.AcceptedFlags = MessageFlags.None;
-				Engine.Selected.Access = FolderAccess.None;
+				var folder = Engine.Selected;
+
+				folder.PermanentFlags = MessageFlags.None;
+				folder.AcceptedFlags = MessageFlags.None;
+				folder.Access = FolderAccess.None;
+
+				folder.OnClosed ();
 			}
 
 			Engine.State = ImapEngineState.Selected;
 			Engine.Selected = this;
+
+			OnOpened ();
 
 			return Access;
 		}
@@ -401,7 +406,7 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, this);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create (access == FolderAccess.ReadOnly ? "EXAMINE" : "SELECT", ic);
 			} catch {
 				PermanentFlags = MessageFlags.None;
@@ -409,13 +414,19 @@ namespace MailKit.Net.Imap {
 			}
 
 			if (Engine.Selected != null && Engine.Selected != this) {
-				Engine.Selected.PermanentFlags = MessageFlags.None;
-				Engine.Selected.AcceptedFlags = MessageFlags.None;
-				Engine.Selected.Access = FolderAccess.None;
+				var folder = Engine.Selected;
+
+				folder.PermanentFlags = MessageFlags.None;
+				folder.AcceptedFlags = MessageFlags.None;
+				folder.Access = FolderAccess.None;
+
+				folder.OnClosed ();
 			}
 
 			Engine.State = ImapEngineState.Selected;
 			Engine.Selected = this;
+
+			OnOpened ();
 
 			return Access;
 		}
@@ -470,12 +481,13 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create (expunge ? "CLOSE" : "UNSELECT", ic);
 
 			Engine.State = ImapEngineState.Authenticated;
 			Access = FolderAccess.None;
 			Engine.Selected = null;
+			OnClosed ();
 		}
 
 		/// <summary>
@@ -546,7 +558,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("CREATE", ic);
 
 			ic = new ImapCommand (Engine, cancellationToken, null, "LIST \"\" %S\r\n", encodedName);
@@ -558,12 +570,10 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("LIST", ic);
 
-			folder = list.FirstOrDefault ();
-
-			if (folder != null)
+			if ((folder = list.FirstOrDefault ()) != null)
 				folder.ParentFolder = this;
 
 			return folder;
@@ -649,14 +659,13 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, this);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("RENAME", ic);
 
 			Engine.FolderCache.Remove (EncodedName);
 			Engine.FolderCache[encodedName] = this;
 
-			ParentFolder.Renamed -= ParentFolderRenamed;
-			SetParentFolder (parent);
+			ParentFolder = parent;
 
 			FullName = Engine.DecodeMailboxName (encodedName);
 			EncodedName = encodedName;
@@ -666,6 +675,7 @@ namespace MailKit.Net.Imap {
 				Engine.State = ImapEngineState.Authenticated;
 				Access = FolderAccess.None;
 				Engine.Selected = null;
+				OnClosed ();
 			}
 
 			OnRenamed (oldFullName, FullName);
@@ -675,7 +685,8 @@ namespace MailKit.Net.Imap {
 		/// Deletes the folder on the IMAP server.
 		/// </summary>
 		/// <remarks>
-		/// Deletes the folder on the IMAP server.
+		/// <para>Deletes the folder on the IMAP server.</para>
+		/// <para>Note: This method will not delete any child folders.</para>
 		/// </remarks>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		/// <exception cref="System.ObjectDisposedException">
@@ -715,13 +726,14 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, this);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("DELETE", ic);
 
 			if (Engine.Selected == this) {
 				Engine.State = ImapEngineState.Authenticated;
 				Access = FolderAccess.None;
 				Engine.Selected = null;
+				OnClosed ();
 			}
 
 			Attributes |= FolderAttributes.NonExistent;
@@ -767,7 +779,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SUBSCRIBE", ic);
 
 			IsSubscribed = true;
@@ -812,7 +824,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("UNSUBSCRIBE", ic);
 
 			IsSubscribed = false;
@@ -884,7 +896,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create (subscribedOnly ? "LSUB" : "LIST", ic);
 
 			return children;
@@ -956,7 +968,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("LIST", ic);
 
 			if (list.Count == 0)
@@ -1009,7 +1021,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("CHECK", ic);
 		}
 
@@ -1090,7 +1102,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, this);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("STATUS", ic);
 		}
 
@@ -1161,7 +1173,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("GETACL", ic);
 
 			return (AccessControlList) ic.UserData;
@@ -1242,7 +1254,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("LISTRIGHTS", ic);
 
 			return (AccessRights) ic.UserData;
@@ -1307,7 +1319,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("MYRIGHTS", ic);
 
 			return (AccessRights) ic.UserData;
@@ -1326,7 +1338,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SETACL", ic);
 		}
 
@@ -1540,7 +1552,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("DELETEACL", ic);
 		}
 
@@ -1581,7 +1593,7 @@ namespace MailKit.Net.Imap {
 			if (!engine.GetCachedFolder (encodedName, out quotaRoot)) {
 				// Note: this shouldn't happen because the quota root should
 				// be one of the parent folders which will all have been added
-				// to the folder cache by thsi point.
+				// to the folder cache by this point.
 			}
 
 			ic.UserData = quota = new FolderQuota (quotaRoot);
@@ -1677,7 +1689,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("GETQUOTAROOT", ic);
 
 			if (ic.UserData == null)
@@ -1744,7 +1756,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SETQUOTA", ic);
 
 			if (ic.UserData == null)
@@ -1803,7 +1815,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("EXPUNGE", ic);
 		}
 
@@ -1907,7 +1919,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("EXPUNGE", ic);
 		}
 
@@ -2006,7 +2018,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, this);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("APPEND", ic);
 
 			var append = ic.RespCodes.OfType<AppendUidResponseCode> ().FirstOrDefault ();
@@ -2093,7 +2105,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, this);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("APPEND", ic);
 
 			var append = ic.RespCodes.OfType<AppendUidResponseCode> ().FirstOrDefault ();
@@ -2230,7 +2242,7 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, this);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("APPEND", ic);
 
 				var append = ic.RespCodes.OfType<AppendUidResponseCode> ().FirstOrDefault ();
@@ -2361,7 +2373,7 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("APPEND", ic);
 
 				var append = ic.RespCodes.OfType<AppendUidResponseCode> ().FirstOrDefault ();
@@ -2469,7 +2481,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, destination);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("COPY", ic);
 
 			var copy = ic.RespCodes.OfType<CopyUidResponseCode> ().FirstOrDefault ();
@@ -2574,7 +2586,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, destination);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("MOVE", ic);
 
 			var copy = ic.RespCodes.OfType<CopyUidResponseCode> ().FirstOrDefault ();
@@ -2658,7 +2670,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, destination);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("COPY", ic);
 		}
 
@@ -2742,7 +2754,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, destination);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("MOVE", ic);
 		}
 
@@ -2798,6 +2810,7 @@ namespace MailKit.Net.Imap {
 				var atom = (string) token.Value;
 				ulong value64;
 				uint value;
+				int idx;
 
 				switch (atom) {
 				case "INTERNALDATE":
@@ -2824,7 +2837,7 @@ namespace MailKit.Net.Imap {
 						throw ImapEngine.UnexpectedToken (token, false);
 
 					summary.Fields |= MessageSummaryItems.MessageSize;
-					summary.MessageSize = value;
+					summary.Size = value;
 					break;
 				case "BODYSTRUCTURE":
 					summary.Body = ImapUtils.ParseBody (engine, string.Empty, ic.CancellationToken);
@@ -2840,7 +2853,7 @@ namespace MailKit.Net.Imap {
 						if (token.Type != ImapTokenType.OpenBracket)
 							throw ImapEngine.UnexpectedToken (token, false);
 
-						// References were requested...
+						// References and/or other headers were requested...
 
 						do {
 							token = engine.ReadToken (ic.CancellationToken);
@@ -2880,15 +2893,25 @@ namespace MailKit.Net.Imap {
 						if (token.Type != ImapTokenType.Literal)
 							throw ImapEngine.UnexpectedToken (token, false);
 
+						summary.References = new MessageIdList ();
+
 						try {
-							var message = engine.ParseMessage (engine.Stream, false, ic.CancellationToken);
-							summary.Fields |= MessageSummaryItems.References;
-							summary.References = message.References;
-							summary.Headers = message.Headers;
+							summary.Headers = engine.ParseHeaders (engine.Stream, ic.CancellationToken);
 						} catch (FormatException) {
 							// consume any remaining literal data...
 							ReadLiteralData (engine, ic.CancellationToken);
+							summary.Headers = new HeaderList ();
 						}
+
+						if ((idx = summary.Headers.IndexOf (HeaderId.References)) != -1) {
+							var references = summary.Headers[idx];
+							var rawValue = references.RawValue;
+
+							foreach (var msgid in MimeUtils.EnumerateReferences (rawValue, 0, rawValue.Length))
+								summary.References.Add (msgid);
+						}
+
+						summary.Fields |= MessageSummaryItems.References;
 					} else {
 						summary.Fields |= MessageSummaryItems.Body;
 
@@ -3170,7 +3193,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -3311,7 +3334,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -3405,7 +3428,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -3570,7 +3593,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -3650,7 +3673,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -3791,7 +3814,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -3880,7 +3903,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -4036,7 +4059,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -4130,7 +4153,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -4281,7 +4304,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -4371,7 +4394,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -4534,7 +4557,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("FETCH", ic);
 
 			return AsReadOnly (ctx.Results.Values);
@@ -4600,21 +4623,23 @@ namespace MailKit.Net.Imap {
 
 		MimeMessage ParseMessage (Stream stream, CancellationToken cancellationToken)
 		{
+			bool dispose = !(stream is MemoryStream || stream is MemoryBlockStream);
+
 			try {
-				return Engine.ParseMessage (stream, true, cancellationToken);
-			} catch {
-				stream.Dispose ();
-				throw;
+				return Engine.ParseMessage (stream, !dispose, cancellationToken);
+			} finally {
+				if (dispose)
+					stream.Dispose ();
 			}
 		}
 
-		MimeEntity ParseEntity (ChainedStream stream, CancellationToken cancellationToken)
+		MimeEntity ParseEntity (Stream stream, bool dispose, CancellationToken cancellationToken)
 		{
 			try {
-				return Engine.ParseEntity (stream, true, cancellationToken);
-			} catch {
-				stream.Dispose ();
-				throw;
+				return Engine.ParseEntity (stream, !dispose, cancellationToken);
+			} finally {
+				if (dispose)
+					stream.Dispose ();
 			}
 		}
 
@@ -4880,6 +4905,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -4913,11 +4941,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (string.Empty, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested message.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested message.");
 
 				ctx.Sections.Remove (string.Empty);
 			} finally {
@@ -4952,6 +4980,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -4985,11 +5016,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (string.Empty, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested message.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested message.");
 
 				ctx.Sections.Remove (string.Empty);
 			} finally {
@@ -5059,6 +5090,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message body.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5105,6 +5139,9 @@ namespace MailKit.Net.Imap {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message body.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -5158,6 +5195,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message body.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5205,6 +5245,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message body.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5233,6 +5276,7 @@ namespace MailKit.Net.Imap {
 			var ic = new ImapCommand (Engine, cancellationToken, this, command);
 			var ctx = new FetchStreamContext (progress);
 			ChainedStream chained;
+			bool dispose = false;
 			Stream stream;
 
 			ic.RegisterUntaggedHandler ("FETCH", FetchStream);
@@ -5245,14 +5289,17 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				chained = new ChainedStream ();
 
 				foreach (var tag in tags) {
 					if (!ctx.Sections.TryGetValue (tag, out stream))
-						throw new ImapCommandException ("The IMAP server did not return the requested body part.");
+						throw new MessageNotFoundException ("The IMAP server did not return the requested body part.");
+
+					if (!(stream is MemoryStream || stream is MemoryBlockStream))
+						dispose = true;
 
 					chained.Add (stream);
 				}
@@ -5263,7 +5310,7 @@ namespace MailKit.Net.Imap {
 				ctx.Dispose ();
 			}
 
-			var entity = ParseEntity (chained, cancellationToken);
+			var entity = ParseEntity (chained, dispose, cancellationToken);
 
 			if (partSpecifier.Length == 0) {
 				for (int i = entity.Headers.Count; i > 0; i--) {
@@ -5305,6 +5352,9 @@ namespace MailKit.Net.Imap {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -5352,6 +5402,9 @@ namespace MailKit.Net.Imap {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -5405,6 +5458,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5452,6 +5508,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5480,6 +5539,7 @@ namespace MailKit.Net.Imap {
 			var ic = new ImapCommand (Engine, cancellationToken, this, command);
 			var ctx = new FetchStreamContext (progress);
 			ChainedStream chained;
+			bool dispose = false;
 			Stream stream;
 
 			ic.RegisterUntaggedHandler ("FETCH", FetchStream);
@@ -5492,14 +5552,17 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				chained = new ChainedStream ();
 
 				foreach (var tag in tags) {
 					if (!ctx.Sections.TryGetValue (tag, out stream))
-						throw new ImapCommandException ("The IMAP server did not return the requested body part.");
+						throw new MessageNotFoundException ("The IMAP server did not return the requested body part.");
+
+					if (!(stream is MemoryStream || stream is MemoryBlockStream))
+						dispose = true;
 
 					chained.Add (stream);
 				}
@@ -5510,7 +5573,7 @@ namespace MailKit.Net.Imap {
 				ctx.Dispose ();
 			}
 
-			var entity = ParseEntity (chained, cancellationToken);
+			var entity = ParseEntity (chained, dispose, cancellationToken);
 
 			if (partSpecifier.Length == 0) {
 				for (int i = entity.Headers.Count; i > 0; i--) {
@@ -5559,6 +5622,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5601,11 +5667,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (string.Empty, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested stream.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested stream.");
 
 				ctx.Sections.Remove (string.Empty);
 			} finally {
@@ -5649,6 +5715,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5691,11 +5760,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (string.Empty, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested stream.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested stream.");
 
 				ctx.Sections.Remove (string.Empty);
 			} finally {
@@ -5736,6 +5805,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5773,11 +5845,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (section, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested stream.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested stream.");
 
 				ctx.Sections.Remove (section);
 			} finally {
@@ -5827,6 +5899,9 @@ namespace MailKit.Net.Imap {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -5874,11 +5949,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (section, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested stream.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested stream.");
 
 				ctx.Sections.Remove (section);
 			} finally {
@@ -5919,6 +5994,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -5956,11 +6034,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (section, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested stream.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested stream.");
 
 				ctx.Sections.Remove (section);
 			} finally {
@@ -6010,6 +6088,9 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="FolderNotOpenException">
 		/// The <see cref="ImapFolder"/> is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The IMAP server did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -6056,11 +6137,11 @@ namespace MailKit.Net.Imap {
 
 				ProcessResponseCodes (ic, null);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("FETCH", ic);
 
 				if (!ctx.Sections.TryGetValue (section, out stream))
-					throw new ImapCommandException ("The IMAP server did not return the requested stream.");
+					throw new MessageNotFoundException ("The IMAP server did not return the requested stream.");
 
 				ctx.Sections.Remove (section);
 			} finally {
@@ -6095,7 +6176,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("STORE", ic);
 
 			if (modseq.HasValue) {
@@ -6458,7 +6539,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("STORE", ic);
 
 			if (modseq.HasValue) {
@@ -6855,7 +6936,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("STORE", ic);
 
 			if (modseq.HasValue) {
@@ -7231,7 +7312,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("STORE", ic);
 
 			if (modseq.HasValue) {
@@ -8119,7 +8200,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SEARCH", ic);
 
 			var results = (SearchResults) ic.UserData;
@@ -8226,7 +8307,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SORT", ic);
 
 			var results = (SearchResults) ic.UserData;
@@ -8323,7 +8404,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SEARCH", ic);
 
 			var results = (SearchResults) ic.UserData;
@@ -8439,7 +8520,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SORT", ic);
 
 			var results = (SearchResults) ic.UserData;
@@ -8533,7 +8614,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SEARCH", ic);
 
 			return (SearchResults) ic.UserData;
@@ -8640,7 +8721,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SORT", ic);
 
 			return (SearchResults) ic.UserData;
@@ -8739,7 +8820,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SEARCH", ic);
 
 			return (SearchResults) ic.UserData;
@@ -8855,7 +8936,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("SORT", ic);
 
 			return (SearchResults) ic.UserData;
@@ -8943,7 +9024,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("THREAD", ic);
 
 			var threads = (IList<MessageThread>) ic.UserData;
@@ -9040,7 +9121,7 @@ namespace MailKit.Net.Imap {
 
 			ProcessResponseCodes (ic, null);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("THREAD", ic);
 
 			var threads = (IList<MessageThread>) ic.UserData;

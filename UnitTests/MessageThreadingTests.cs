@@ -87,7 +87,7 @@ namespace UnitTests {
 			summary.Envelope.MessageId = MimeUtils.EnumerateReferences (msgid).FirstOrDefault ();
 			summary.Envelope.Subject = subject;
 			summary.Envelope.Date = value;
-			summary.MessageSize = 0;
+			summary.Size = 0;
 
 			summaries.Add (summary);
 		}
@@ -98,10 +98,12 @@ namespace UnitTests {
 
 			if (thread.UniqueId.HasValue) {
 				var summary = summaries[(int) thread.UniqueId.Value.Id];
-				builder.AppendLine (summary.Envelope.Subject);
+				builder.Append (summary.Envelope.Subject);
 			} else {
-				builder.AppendLine ("dummy");
+				builder.Append ("dummy");
 			}
+
+			builder.Append ('\n');
 
 			foreach (var child in thread.Children)
 				WriteMessageThread (builder, child, depth + 1);
@@ -181,7 +183,7 @@ namespace UnitTests {
 			MakeThreadable ("Re: Welcome to Netscape", "<337AAE46.903032E4@netscape.com>", "Wed, 14 May 1997 23:33:45 -0700", "<337AAB3D.C8BCE069@netscape.com>");
 			MakeThreadable ("[Fwd: enc/signed test 1]", "<338B6EE2.BB26C74C@netscape.com>", "Tue, 27 May 1997 16:31:46 -0700", null);
 
-			const string expected = @"A
+			string expected = @"A
    B
       C
          E
@@ -235,9 +237,9 @@ foo
 Welcome to Netscape
    Re: Welcome to Netscape
 [Fwd: enc/signed test 1]
-";
+".Replace ("\r\n", "\n");
 
-			var threads = MessageThreader.Thread (ThreadingAlgorithm.References, summaries);
+			var threads = summaries.Thread (ThreadingAlgorithm.References);
 			var builder = new StringBuilder ();
 
 			foreach (var thread in threads)

@@ -100,7 +100,7 @@ namespace UnitTests.Net.Imap {
 
 			using (var client = new ImapClient ()) {
 				try {
-					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false), CancellationToken.None);
+					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false));
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Connect: {0}", ex);
 				}
@@ -110,6 +110,79 @@ namespace UnitTests.Net.Imap {
 				Assert.AreEqual (GreetingCapabilities, client.Capabilities);
 				Assert.AreEqual (1, client.AuthenticationMechanisms.Count);
 				Assert.IsTrue (client.AuthenticationMechanisms.Contains ("PLAIN"), "Expected SASL PLAIN auth mechanism");
+			}
+		}
+
+		[Test]
+		public void TestImapClientFeatures ()
+		{
+			var commands = new List<ImapReplayCommand> ();
+			commands.Add (new ImapReplayCommand ("", "gmail.greeting.txt"));
+			commands.Add (new ImapReplayCommand ("A00000000 CAPABILITY\r\n", "gmail.capability.txt"));
+			commands.Add (new ImapReplayCommand ("A00000001 AUTHENTICATE PLAIN AHVzZXJuYW1lAHBhc3N3b3Jk\r\n", "gmail.authenticate.txt"));
+			commands.Add (new ImapReplayCommand ("A00000002 NAMESPACE\r\n", "gmail.namespace.txt"));
+			commands.Add (new ImapReplayCommand ("A00000003 LIST \"\" \"INBOX\"\r\n", "gmail.list-inbox.txt"));
+			commands.Add (new ImapReplayCommand ("A00000004 XLIST \"\" \"*\"\r\n", "gmail.xlist.txt"));
+			commands.Add (new ImapReplayCommand ("A00000005 ID (\"name\" \"MailKit\" \"version\" \"1.0\" \"vendor\" \"Xamarin Inc.\")\r\n", "common.id.txt"));
+			commands.Add (new ImapReplayCommand ("A00000006 GETQUOTAROOT INBOX\r\n", "common.getquota.txt"));
+
+			using (var client = new ImapClient ()) {
+				try {
+					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false));
+				} catch (Exception ex) {
+					Assert.Fail ("Did not expect an exception in Connect: {0}", ex);
+				}
+
+				Assert.IsTrue (client.IsConnected, "Client failed to connect.");
+
+				Assert.AreEqual (GMailInitialCapabilities, client.Capabilities);
+				Assert.AreEqual (4, client.AuthenticationMechanisms.Count);
+				Assert.IsTrue (client.AuthenticationMechanisms.Contains ("XOAUTH"), "Expected SASL XOAUTH auth mechanism");
+				Assert.IsTrue (client.AuthenticationMechanisms.Contains ("XOAUTH2"), "Expected SASL XOAUTH2 auth mechanism");
+				Assert.IsTrue (client.AuthenticationMechanisms.Contains ("PLAIN"), "Expected SASL PLAIN auth mechanism");
+				Assert.IsTrue (client.AuthenticationMechanisms.Contains ("PLAIN-CLIENTTOKEN"), "Expected SASL PLAIN-CLIENTTOKEN auth mechanism");
+
+				try {
+					var credentials = new NetworkCredential ("username", "password");
+
+					// Note: Do not try XOAUTH2
+					client.AuthenticationMechanisms.Remove ("XOAUTH2");
+
+					client.Authenticate (credentials);
+				} catch (Exception ex) {
+					Assert.Fail ("Did not expect an exception in Authenticate: {0}", ex);
+				}
+
+				Assert.AreEqual (GMailAuthenticatedCapabilities, client.Capabilities);
+
+				var implementation = new ImapImplementation {
+					Name = "MailKit", Version = "1.0", Vendor = "Xamarin Inc."
+				};
+
+				implementation = client.Identify (implementation);
+				Assert.IsNotNull (implementation, "Expected a non-null ID response.");
+				Assert.AreEqual ("GImap", implementation.Name);
+				Assert.AreEqual ("Google, Inc.", implementation.Vendor);
+				Assert.AreEqual ("http://support.google.com/mail", implementation.SupportUrl);
+				Assert.AreEqual ("gmail_imap_150623.03_p1", implementation.Version);
+				Assert.AreEqual ("127.0.0.1", implementation.Properties["remote-host"]);
+
+				var personal = client.GetFolder (client.PersonalNamespaces[0]);
+				var inbox = client.Inbox;
+
+				Assert.IsNotNull (inbox, "Expected non-null Inbox folder.");
+				Assert.AreEqual (FolderAttributes.Inbox | FolderAttributes.HasNoChildren, inbox.Attributes, "Expected Inbox attributes to be \\HasNoChildren.");
+
+				var quota = inbox.GetQuota ();
+				Assert.IsNotNull (quota, "Expected a non-null GETQUOTAROOT response.");
+				Assert.AreEqual (personal.FullName, quota.QuotaRoot.FullName);
+				Assert.AreEqual (personal, quota.QuotaRoot);
+				Assert.AreEqual (3783, quota.CurrentStorageSize.Value);
+				Assert.AreEqual (15728640, quota.StorageLimit.Value);
+				Assert.IsFalse (quota.CurrentMessageCount.HasValue);
+				Assert.IsFalse (quota.MessageLimit.HasValue);
+
+				client.Disconnect (false);
 			}
 		}
 
@@ -124,7 +197,7 @@ namespace UnitTests.Net.Imap {
 			commands.Add (new ImapReplayCommand ("A00000003 LIST \"\" \"INBOX\"\r\n", "gmail.list-inbox.txt"));
 			commands.Add (new ImapReplayCommand ("A00000004 XLIST \"\" \"*\"\r\n", "gmail.xlist.txt"));
 			commands.Add (new ImapReplayCommand ("A00000005 LIST \"\" \"%\"\r\n", "gmail.list-personal.txt"));
-			commands.Add (new ImapReplayCommand ("A00000006 CREATE UnitTests\r\n", "gmail.create-unittests.txt"));
+			commands.Add (new ImapReplayCommand ("A00000006 CREATE UnitTests\r\n", ImapReplayCommandResponse.OK));
 			commands.Add (new ImapReplayCommand ("A00000007 LIST \"\" UnitTests\r\n", "gmail.list-unittests.txt"));
 			commands.Add (new ImapReplayCommand ("A00000008 SELECT UnitTests (CONDSTORE)\r\n", "gmail.select-unittests.txt"));
 
@@ -139,7 +212,9 @@ namespace UnitTests.Net.Imap {
 
 						stream.Position = 0;
 					}
-					var message = MimeMessage.Load (stream);
+
+					MimeMessage.Load (stream);
+
 					long length = stream.Length;
 					string latin1;
 
@@ -179,15 +254,21 @@ namespace UnitTests.Net.Imap {
 			commands.Add (new ImapReplayCommand ("A00000080 UID FETCH 43 (BODY.PEEK[])\r\n", "gmail.fetch.43.txt"));
 			commands.Add (new ImapReplayCommand ("A00000081 UID FETCH 50 (BODY.PEEK[])\r\n", "gmail.fetch.50.txt"));
 			commands.Add (new ImapReplayCommand ("A00000082 UID STORE 1:3,5,7:9,11:14,26:29,31,34,41:43,50 FLAGS (\\Answered \\Seen)\r\n", "gmail.set-flags.txt"));
-			commands.Add (new ImapReplayCommand ("A00000083 UID STORE 1:3,5,7:9,11:14,26:29,31,34,41:43,50 -FLAGS.SILENT (\\Answered)\r\n", "gmail.remove-flags.txt"));
+			commands.Add (new ImapReplayCommand ("A00000083 UID STORE 1:3,5,7:9,11:14,26:29,31,34,41:43,50 -FLAGS.SILENT (\\Answered)\r\n", ImapReplayCommandResponse.OK));
 			commands.Add (new ImapReplayCommand ("A00000084 UID STORE 1:3,5,7:9,11:14,26:29,31,34,41:43,50 +FLAGS.SILENT (\\Deleted)\r\n", "gmail.add-flags.txt"));
-			commands.Add (new ImapReplayCommand ("A00000085 UNSELECT\r\n", "gmail.unselect-unittests.txt"));
-			commands.Add (new ImapReplayCommand ("A00000086 DELETE UnitTests\r\n", "gmail.delete-unittests.txt"));
-			commands.Add (new ImapReplayCommand ("A00000087 LOGOUT\r\n", "gmail.logout.txt"));
+			commands.Add (new ImapReplayCommand ("A00000085 UNSELECT\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000086 SUBSCRIBE UnitTests\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000087 LSUB \"\" \"%\"\r\n", "gmail.lsub-personal.txt"));
+			commands.Add (new ImapReplayCommand ("A00000088 UNSUBSCRIBE UnitTests\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000089 CREATE UnitTests/Dummy\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000090 LIST \"\" UnitTests/Dummy\r\n", "gmail.list-unittests-dummy.txt"));
+			commands.Add (new ImapReplayCommand ("A00000091 RENAME UnitTests RenamedUnitTests\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000092 DELETE RenamedUnitTests\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000093 LOGOUT\r\n", "gmail.logout.txt"));
 
 			using (var client = new ImapClient ()) {
 				try {
-					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false), CancellationToken.None);
+					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false));
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Connect: {0}", ex);
 				}
@@ -207,7 +288,7 @@ namespace UnitTests.Net.Imap {
 					// Note: Do not try XOAUTH2
 					client.AuthenticationMechanisms.Remove ("XOAUTH2");
 
-					client.Authenticate (credentials, CancellationToken.None);
+					client.Authenticate (credentials);
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Authenticate: {0}", ex);
 				}
@@ -232,18 +313,20 @@ namespace UnitTests.Net.Imap {
 				}
 
 				var personal = client.GetFolder (client.PersonalNamespaces[0]);
-				var folders = personal.GetSubfolders (false, CancellationToken.None).ToList ();
+				var folders = personal.GetSubfolders ().ToList ();
 				Assert.AreEqual (client.Inbox, folders[0], "Expected the first folder to be the Inbox.");
 				Assert.AreEqual ("[Gmail]", folders[1].FullName, "Expected the second folder to be [Gmail].");
 				Assert.AreEqual (FolderAttributes.NoSelect | FolderAttributes.HasChildren, folders[1].Attributes, "Expected [Gmail] folder to be \\Noselect \\HasChildren.");
 
-				var created = personal.Create ("UnitTests", true, CancellationToken.None);
+				var created = personal.Create ("UnitTests", true);
+				Assert.IsNotNull (created, "Expected a non-null created folder.");
+				Assert.AreEqual (FolderAttributes.HasNoChildren, created.Attributes);
 
 				Assert.IsNotNull (created.ParentFolder, "The ParentFolder property should not be null.");
 
 				const MessageFlags ExpectedPermanentFlags = MessageFlags.Answered | MessageFlags.Flagged | MessageFlags.Draft | MessageFlags.Deleted | MessageFlags.Seen | MessageFlags.UserDefined;
 				const MessageFlags ExpectedAcceptedFlags = MessageFlags.Answered | MessageFlags.Flagged | MessageFlags.Draft | MessageFlags.Deleted | MessageFlags.Seen;
-				var access = created.Open (FolderAccess.ReadWrite, CancellationToken.None);
+				var access = created.Open (FolderAccess.ReadWrite);
 				Assert.AreEqual (FolderAccess.ReadWrite, access, "The UnitTests folder was not opened with the expected access mode.");
 				Assert.AreEqual (ExpectedPermanentFlags, created.PermanentFlags, "The PermanentFlags do not match the expected value.");
 				Assert.AreEqual (ExpectedAcceptedFlags, created.AcceptedFlags, "The AcceptedFlags do not match the expected value.");
@@ -252,33 +335,59 @@ namespace UnitTests.Net.Imap {
 					using (var stream = GetResourceStream (string.Format ("common.message.{0}.msg", i))) {
 						var message = MimeMessage.Load (stream);
 
-						var uid = created.Append (message, MessageFlags.Seen, CancellationToken.None);
+						var uid = created.Append (message, MessageFlags.Seen);
 						Assert.IsTrue (uid.HasValue, "Expected a UID to be returned from folder.Append().");
 						Assert.AreEqual ((uint) (i + 1), uid.Value.Id, "The UID returned from the APPEND command does not match the expected UID.");
 					}
 				}
 
 				var query = SearchQuery.ToContains ("nsb").Or (SearchQuery.CcContains ("nsb"));
-				var matches = created.Search (query, CancellationToken.None);
+				var matches = created.Search (query);
 
 				const MessageSummaryItems items = MessageSummaryItems.Full | MessageSummaryItems.UniqueId;
-				var summaries = created.Fetch (matches, items, CancellationToken.None);
+				var summaries = created.Fetch (matches, items);
 
 				foreach (var summary in summaries) {
-					if (summary.UniqueId.HasValue)
-						created.GetMessage (summary.UniqueId.Value, CancellationToken.None);
+					if (summary.UniqueId.IsValid)
+						created.GetMessage (summary.UniqueId);
 					else
-						created.GetMessage (summary.Index, CancellationToken.None);
+						created.GetMessage (summary.Index);
 				}
 
-				created.SetFlags (matches, MessageFlags.Seen | MessageFlags.Answered, false, CancellationToken.None);
-				created.RemoveFlags (matches, MessageFlags.Answered, true, CancellationToken.None);
-				created.AddFlags (matches, MessageFlags.Deleted, true, CancellationToken.None);
+				created.SetFlags (matches, MessageFlags.Seen | MessageFlags.Answered, false);
+				created.RemoveFlags (matches, MessageFlags.Answered, true);
+				created.AddFlags (matches, MessageFlags.Deleted, true);
 
-				created.Close (false, CancellationToken.None);
+				created.Close ();
+				Assert.IsFalse (created.IsOpen, "Expected the UnitTests folder to be closed.");
+
+				created.Subscribe ();
+				Assert.IsTrue (created.IsSubscribed, "Expected IsSubscribed to be true after subscribing to the folder.");
+
+				var subscribed = personal.GetSubfolders (true).ToList ();
+				Assert.IsTrue (subscribed.Contains (created), "Expected the list of subscribed folders to contain the UnitTests folder.");
+
+				created.Unsubscribe ();
+				Assert.IsFalse (created.IsSubscribed, "Expected IsSubscribed to be false after unsubscribing from the folder.");
+
+				var dummy = created.Create ("Dummy", true);
+				bool dummyRenamed = false;
+				bool renamed = false;
+
+				dummy.Renamed += (sender, e) => { dummyRenamed = true; };
+				created.Renamed += (sender, e) => { renamed = true; };
+
+				created.Rename (created.ParentFolder, "RenamedUnitTests");
+				Assert.AreEqual ("RenamedUnitTests", created.Name);
+				Assert.AreEqual ("RenamedUnitTests", created.FullName);
+				Assert.IsTrue (renamed, "Expected the Rename event to be emitted for the UnitTests folder.");
+
+				Assert.AreEqual ("RenamedUnitTests/Dummy", dummy.FullName);
+				Assert.IsTrue (dummyRenamed, "Expected the Rename event to be emitted for the UnitTests/Dummy folder.");
+
 				created.Delete (CancellationToken.None);
 
-				client.Disconnect (true, CancellationToken.None);
+				client.Disconnect (true);
 			}
 		}
 
@@ -295,14 +404,14 @@ namespace UnitTests.Net.Imap {
 			commands.Add (new ImapReplayCommand ("A00000005 GETACL INBOX\r\n", "acl.getacl.txt"));
 			commands.Add (new ImapReplayCommand ("A00000006 LISTRIGHTS INBOX smith\r\n", "acl.listrights.txt"));
 			commands.Add (new ImapReplayCommand ("A00000007 MYRIGHTS INBOX\r\n", "acl.myrights.txt"));
-			commands.Add (new ImapReplayCommand ("A00000008 SETACL INBOX smith +lrswida\r\n", "acl.setacl1.txt"));
-			commands.Add (new ImapReplayCommand ("A00000009 SETACL INBOX smith -lrswida\r\n", "acl.setacl2.txt"));
-			commands.Add (new ImapReplayCommand ("A00000010 SETACL INBOX smith lrswida\r\n", "acl.setacl3.txt"));
-			commands.Add (new ImapReplayCommand ("A00000011 DELETEACL INBOX smith\r\n", "acl.deleteacl.txt"));
+			commands.Add (new ImapReplayCommand ("A00000008 SETACL INBOX smith +lrswida\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000009 SETACL INBOX smith -lrswida\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000010 SETACL INBOX smith lrswida\r\n", ImapReplayCommandResponse.OK));
+			commands.Add (new ImapReplayCommand ("A00000011 DELETEACL INBOX smith\r\n", ImapReplayCommandResponse.OK));
 
 			using (var client = new ImapClient ()) {
 				try {
-					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false), CancellationToken.None);
+					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false));
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Connect: {0}", ex);
 				}
@@ -322,7 +431,7 @@ namespace UnitTests.Net.Imap {
 					// Note: Do not try XOAUTH2
 					client.AuthenticationMechanisms.Remove ("XOAUTH2");
 
-					client.Authenticate (credentials, CancellationToken.None);
+					client.Authenticate (credentials);
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Authenticate: {0}", ex);
 				}
@@ -374,7 +483,7 @@ namespace UnitTests.Net.Imap {
 				// DELETEACL INBOX smith
 				client.Inbox.RemoveAccess ("smith");
 
-				client.Disconnect (false, CancellationToken.None);
+				client.Disconnect (false);
 			}
 		}
 
@@ -394,7 +503,7 @@ namespace UnitTests.Net.Imap {
 
 			using (var client = new ImapClient ()) {
 				try {
-					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false), CancellationToken.None);
+					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false));
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Connect: {0}", ex);
 				}
@@ -414,7 +523,7 @@ namespace UnitTests.Net.Imap {
 					// Note: Do not try XOAUTH2
 					client.AuthenticationMechanisms.Remove ("XOAUTH2");
 
-					client.Authenticate (credentials, CancellationToken.None);
+					client.Authenticate (credentials);
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Authenticate: {0}", ex);
 				}
@@ -439,14 +548,14 @@ namespace UnitTests.Net.Imap {
 				}
 
 				var personal = client.GetFolder (client.PersonalNamespaces[0]);
-				var folders = personal.GetSubfolders (false, CancellationToken.None).ToList ();
+				var folders = personal.GetSubfolders ().ToList ();
 				Assert.AreEqual (client.Inbox, folders[0], "Expected the first folder to be the Inbox.");
 				Assert.AreEqual ("[Gmail]", folders[1].FullName, "Expected the second folder to be [Gmail].");
 				Assert.AreEqual (FolderAttributes.NoSelect | FolderAttributes.HasChildren, folders[1].Attributes, "Expected [Gmail] folder to be \\Noselect \\HasChildren.");
 
-				client.Inbox.Open (FolderAccess.ReadOnly, CancellationToken.None);
+				client.Inbox.Open (FolderAccess.ReadOnly);
 
-				var message = client.Inbox.GetMessage (269, CancellationToken.None);
+				var message = client.Inbox.GetMessage (269);
 
 				using (var jpeg = new MemoryStream ()) {
 					var attachment = message.Attachments.OfType<MimePart> ().FirstOrDefault ();
@@ -461,7 +570,7 @@ namespace UnitTests.Net.Imap {
 					}
 				}
 
-				client.Disconnect (false, CancellationToken.None);
+				client.Disconnect (false);
 			}
 		}
 		
@@ -482,7 +591,7 @@ namespace UnitTests.Net.Imap {
 
 			using (var client = new ImapClient ()) {
 				try {
-					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false), CancellationToken.None);
+					client.ReplayConnect ("localhost", new ImapReplayStream (commands, false));
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Connect: {0}", ex);
 				}
@@ -495,7 +604,7 @@ namespace UnitTests.Net.Imap {
 					// Note: Do not try XOAUTH2
 					client.AuthenticationMechanisms.Remove ("XOAUTH2");
 
-					client.Authenticate (credentials, CancellationToken.None);
+					client.Authenticate (credentials);
 				} catch (Exception ex) {
 					Assert.Fail ("Did not expect an exception in Authenticate: {0}", ex);
 				}
@@ -508,9 +617,9 @@ namespace UnitTests.Net.Imap {
 					count = client.Inbox.Count;
 				};
 				
-				client.NoOp();
+				client.NoOp ();
 				
-				Assert.AreEqual(1, count, "Count is not correct");
+				Assert.AreEqual (1, count, "Count is not correct");
 			}
 		}
 	}

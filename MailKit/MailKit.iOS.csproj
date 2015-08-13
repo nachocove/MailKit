@@ -19,7 +19,7 @@
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\lib\Xamarin.iOS</OutputPath>
     <IntermediateOutputPath>obj\Debug\lib\Xamarin.iOS</IntermediateOutputPath>
-    <DefineConstants>DEBUG;__MOBILE__;__IOS__;</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;SERIALIZABLE;__MOBILE__;__IOS__;</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
@@ -32,7 +32,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
-    <DefineConstants>__MOBILE__;__IOS__;</DefineConstants>
+    <DefineConstants>SERIALIZABLE;__MOBILE__;__IOS__;</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DocumentationFile>bin\Release\lib\Xamarin.iOS\MailKit.xml</DocumentationFile>
   </PropertyGroup>
@@ -49,7 +49,7 @@
     <Reference Include="Xamarin.iOS" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MimeKit\MimeKit\MimeKit.iOS.csproj">
+    <ProjectReference Include="..\submodules\MimeKit\MimeKit\MimeKit.iOS.csproj">
       <Project>{4C1288AD-12C8-4BF7-AED7-6C4DC539C856}</Project>
       <Name>MimeKit.iOS</Name>
     </ProjectReference>
@@ -59,6 +59,7 @@
     <Compile Include="Net\Imap\ImapClient.cs" />
     <Compile Include="Net\Imap\ImapCommand.cs" />
     <Compile Include="Net\Imap\ImapCommandException.cs" />
+    <Compile Include="Net\Imap\ImapCommandResponse.cs" />
     <Compile Include="Net\Imap\ImapEncoding.cs" />
     <Compile Include="Net\Imap\ImapEngine.cs" />
     <Compile Include="Net\Imap\ImapFolder.cs" />
@@ -156,8 +157,6 @@
     <Compile Include="IMailTransport.cs" />
     <Compile Include="IMessageSummary.cs" />
     <Compile Include="IProtocolLogger.cs" />
-    <Compile Include="ISortable.cs" />
-    <Compile Include="IThreadable.cs" />
     <Compile Include="ITransferProgress.cs" />
     <Compile Include="MailFolder.cs" />
     <Compile Include="MailService.cs" />
@@ -168,6 +167,7 @@
     <Compile Include="MessageFlags.cs" />
     <Compile Include="MessageFlagsChangedEventArgs.cs" />
     <Compile Include="MessageLabelsChangedEventArgs.cs" />
+    <Compile Include="MessageNotFoundException.cs" />
     <Compile Include="MessagesArrivedEventArgs.cs" />
     <Compile Include="MessageSentEventArgs.cs" />
     <Compile Include="MessageSorter.cs" />

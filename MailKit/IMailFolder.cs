@@ -258,7 +258,7 @@ namespace MailKit {
 		/// <param name="highestModSeq">The last known <see cref="HighestModSeq"/> value.</param>
 		/// <param name="uids">The last known list of unique message identifiers.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
-		FolderAccess Open (FolderAccess access, UniqueId uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken));
+		FolderAccess Open (FolderAccess access, uint uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Asynchronously opens the folder using the requested folder access.
@@ -277,7 +277,7 @@ namespace MailKit {
 		/// <param name="highestModSeq">The last known <see cref="HighestModSeq"/> value.</param>
 		/// <param name="uids">The last known list of unique message identifiers.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
-		Task<FolderAccess> OpenAsync (FolderAccess access, UniqueId uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken));
+		Task<FolderAccess> OpenAsync (FolderAccess access, uint uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Open the folder using the requested folder access.
@@ -4137,6 +4137,22 @@ namespace MailKit {
 		/// <param name="query">The search query.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		Task<IList<MessageThread>> ThreadAsync (IList<UniqueId> uids, ThreadingAlgorithm algorithm, SearchQuery query, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Occurs when the folder is opened.
+		/// </summary>
+		/// <remarks>
+		/// Emitted when the folder is opened.
+		/// </remarks>
+		event EventHandler<EventArgs> Opened;
+
+		/// <summary>
+		/// Occurs when the folder is closed.
+		/// </summary>
+		/// <remarks>
+		/// Emitted when the folder is closed.
+		/// </remarks>
+		event EventHandler<EventArgs> Closed;
 
 		/// <summary>
 		/// Occurs when the folder is deleted.

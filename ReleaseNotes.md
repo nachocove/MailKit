@@ -1,5 +1,50 @@
 # Release Notes
 
+### MailKit 1.2.9
+
+* Fixed ImapFolder.Append() methods to make sure to encode the message with <CR><LF>
+  line endings.
+* Added UniqueId.Invalid that can be used for error conditions.
+* Added UniqueId.IsValid property to check that the UniqueId is valid.
+* Added Opened and Closed events to IMailFolder.
+* Fixed the QRESYNC version of the IMailFolder.Open() method to take a uint uidValidity
+  instead of a UniqueId uidValidity argument for consistency.
+* Updated MessageSorter.Sort() to be an extension method and added a List<T> overload.
+* Updated MessageThreader.Thread() to be extension methods (required reordering of args).
+* Merged ISortable and IThreadable interfaces into IMessageSummary in order to
+  remove duplicated properties and simplify things.
+* Renamed IMessageSummary.MessageSize to IMessageSummary.Size.
+* Modified IMessageSummary.UniqueId to no longer be nullable.
+* Added TextBody, HtmlBody, BodyParts and Attachments properties to IMessageSummary.
+* Modified the IMAP parser to allow NIL for the Content-Type and subtype strings in
+  BODY and BODYSTRUCTURE values even though it is illegal. (issue #226)
+* Modified the IMAP parser to properly handle Message-Id tokens that are not properly
+  encapsulated within angle brackets. (issue #224)
+* Fixed IMAP to properly deal with folder names that contained unescaped square brackets.
+  (issue #222)
+
+### MailKit 1.2.8
+
+* Fixed ImapFolder to dispose the temporary streams used in GetMessage and GetBodyPart.
+* Added a MessageNotFoundException.
+* Added an ImapCommandResponse property to ImapCommandException.
+* Fixed SmtpClient to filter out duplicate recipient addresses in RCPT TO.
+* Modified MessageSorter/Threader to take IList<OrderBy> arguments instead of OrderBy[].
+* Added support for parsing group addresses in IMAP ENVELOPE responses.
+* Disable SASL-IR support for the LOGIN mechanism. (issue #216)
+* Capture whether or not the IMAP server supports the I18NLEVEL and LANGUAGE extensions.
+
+### MailKit 1.2.7
+
+* Fixed ImapFolder.Rename() to properly emit the Renamed event for child folders as well.
+* Fixed ImapFolder.Fetch() to always fill in the Headers property when requesting specific
+  headers even if the server replies with an empty list. (issue #210)
+
+### MailKit 1.2.6
+
+* Fixed UniqueIdSet.CopyTo() to work properly (also fixes LINQ usage).
+* Fixed ImapFolder.Status() where StatusItems.HighestModSeq is used.
+
 ### MailKit 1.2.5
 
 * Added support for extended IMAP search options (see the SearchOptions flags).

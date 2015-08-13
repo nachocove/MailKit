@@ -3,8 +3,6 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{7264D469-A390-4C10-9C87-DAA37EDD3C1D}</ProjectGuid>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <OutputType>Library</OutputType>
@@ -17,7 +15,7 @@
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\lib\net45</OutputPath>
     <IntermediateOutputPath>obj\Debug\lib\net45</IntermediateOutputPath>
-    <DefineConstants>DEBUG;NET_4_5</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;SERIALIZABLE;NET_4_5</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
@@ -32,7 +30,7 @@
     <ConsolePause>false</ConsolePause>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DocumentationFile>bin\Release\lib\net45\MailKit.xml</DocumentationFile>
-    <DefineConstants>NET_4_5</DefineConstants>
+    <DefineConstants>SERIALIZABLE;NET_4_5</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <SignAssembly>true</SignAssembly>
@@ -46,7 +44,7 @@
     <Reference Include="System.Net" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MimeKit\MimeKit\MimeKit.csproj">
+    <ProjectReference Include="..\submodules\MimeKit\MimeKit\MimeKit.csproj">
       <Project>{D5F54A4F-D84B-430F-9271-F7861E285B3E}</Project>
       <Name>MimeKit</Name>
     </ProjectReference>
@@ -56,6 +54,7 @@
     <Compile Include="Net\Imap\ImapClient.cs" />
     <Compile Include="Net\Imap\ImapCommand.cs" />
     <Compile Include="Net\Imap\ImapCommandException.cs" />
+    <Compile Include="Net\Imap\ImapCommandResponse.cs" />
     <Compile Include="Net\Imap\ImapEncoding.cs" />
     <Compile Include="Net\Imap\ImapEngine.cs" />
     <Compile Include="Net\Imap\ImapFolder.cs" />
@@ -153,8 +152,6 @@
     <Compile Include="IMailTransport.cs" />
     <Compile Include="IMessageSummary.cs" />
     <Compile Include="IProtocolLogger.cs" />
-    <Compile Include="ISortable.cs" />
-    <Compile Include="IThreadable.cs" />
     <Compile Include="ITransferProgress.cs" />
     <Compile Include="MailFolder.cs" />
     <Compile Include="MailService.cs" />
@@ -165,6 +162,7 @@
     <Compile Include="MessageFlags.cs" />
     <Compile Include="MessageFlagsChangedEventArgs.cs" />
     <Compile Include="MessageLabelsChangedEventArgs.cs" />
+    <Compile Include="MessageNotFoundException.cs" />
     <Compile Include="MessagesArrivedEventArgs.cs" />
     <Compile Include="MessageSentEventArgs.cs" />
     <Compile Include="MessageSorter.cs" />

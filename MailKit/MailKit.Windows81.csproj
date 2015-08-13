@@ -127,11 +127,11 @@
     <VisualStudioVersion>12.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MimeKit\MimeKit\MimeKit.WindowsUniversal81.csproj">
+    <ProjectReference Include="..\submodules\MimeKit\MimeKit\MimeKit.WindowsUniversal81.csproj">
       <Project>{d9906b8c-7bbd-4cce-ac7c-e9bca020d20c}</Project>
       <Name>MimeKit.WindowsUniversal81</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Portable.Text.Encoding\Portable.Text.Encoding\Portable.Text.Encoding.WindowsUniversal81.csproj">
+    <ProjectReference Include="..\submodules\MimeKit\submodules\Portable.Text.Encoding\Portable.Text.Encoding\Portable.Text.Encoding.WindowsUniversal81.csproj">
       <Project>{b76a64f9-b00e-4243-ae89-5d024ca3b436}</Project>
       <Name>Portable.Text.Encoding.WindowsUniversal81</Name>
     </ProjectReference>
@@ -141,6 +141,7 @@
     <Compile Include="Net\Imap\ImapClient.cs" />
     <Compile Include="Net\Imap\ImapCommand.cs" />
     <Compile Include="Net\Imap\ImapCommandException.cs" />
+    <Compile Include="Net\Imap\ImapCommandResponse.cs" />
     <Compile Include="Net\Imap\ImapEncoding.cs" />
     <Compile Include="Net\Imap\ImapEngine.cs" />
     <Compile Include="Net\Imap\ImapFolder.cs" />
@@ -243,8 +244,6 @@
     <Compile Include="IMailTransport.cs" />
     <Compile Include="IMessageSummary.cs" />
     <Compile Include="IProtocolLogger.cs" />
-    <Compile Include="ISortable.cs" />
-    <Compile Include="IThreadable.cs" />
     <Compile Include="ITransferProgress.cs" />
     <Compile Include="MailFolder.cs" />
     <Compile Include="MailService.cs" />
@@ -255,6 +254,7 @@
     <Compile Include="MessageFlags.cs" />
     <Compile Include="MessageFlagsChangedEventArgs.cs" />
     <Compile Include="MessageLabelsChangedEventArgs.cs" />
+    <Compile Include="MessageNotFoundException.cs" />
     <Compile Include="MessagesArrivedEventArgs.cs" />
     <Compile Include="MessageSentEventArgs.cs" />
     <Compile Include="MessageSorter.cs" />

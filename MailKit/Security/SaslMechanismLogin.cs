@@ -55,6 +55,11 @@ namespace MailKit.Security {
 		/// </remarks>
 		/// <param name="uri">The URI of the service.</param>
 		/// <param name="credentials">The user's credentials.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="uri"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
+		/// </exception>
 		public SaslMechanismLogin (Uri uri, ICredentials credentials) : base (uri, credentials)
 		{
 		}
@@ -79,7 +84,7 @@ namespace MailKit.Security {
 		/// </remarks>
 		/// <value><c>true</c> if the mechanism supports an initial response; otherwise, <c>false</c>.</value>
 		public override bool SupportsInitialResponse {
-			get { return true; }
+			get { return false; }
 		}
 
 		/// <summary>
@@ -95,6 +100,9 @@ namespace MailKit.Security {
 		/// <exception cref="System.InvalidOperationException">
 		/// The SASL mechanism is already authenticated.
 		/// </exception>
+		/// <exception cref="System.NotSupportedException">
+		/// The SASL mechanism does not support SASL-IR.
+		/// </exception>
 		/// <exception cref="SaslException">
 		/// An error has occurred while parsing the server's challenge token.
 		/// </exception>
@@ -102,6 +110,9 @@ namespace MailKit.Security {
 		{
 			var cred = Credentials.GetCredential (Uri, MechanismName);
 			byte[] challenge;
+
+			if (token == null)
+				throw new NotSupportedException ("LOGIN does not support SASL-IR.");
 
 			switch (state) {
 			case LoginState.UserName:

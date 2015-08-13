@@ -16,7 +16,7 @@
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\lib\net40</OutputPath>
     <IntermediateOutputPath>obj\Debug\lib\net40</IntermediateOutputPath>
-    <DefineConstants>DEBUG;</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;SERIALIZABLE;</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
@@ -31,6 +31,7 @@
     <ConsolePause>false</ConsolePause>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DocumentationFile>bin\Release\lib\net40\MailKit.xml</DocumentationFile>
+    <DefineConstants>SERIALIZABLE;</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <SignAssembly>true</SignAssembly>
@@ -44,7 +45,7 @@
     <Reference Include="System.Net" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MimeKit\MimeKit\MimeKit.Net40.csproj">
+    <ProjectReference Include="..\submodules\MimeKit\MimeKit\MimeKit.Net40.csproj">
       <Project>{C909FC86-6084-41E5-B99C-DCDF2A5B7F82}</Project>
       <Name>MimeKit.Net40</Name>
     </ProjectReference>
@@ -54,6 +55,7 @@
     <Compile Include="Net\Imap\ImapClient.cs" />
     <Compile Include="Net\Imap\ImapCommand.cs" />
     <Compile Include="Net\Imap\ImapCommandException.cs" />
+    <Compile Include="Net\Imap\ImapCommandResponse.cs" />
     <Compile Include="Net\Imap\ImapEncoding.cs" />
     <Compile Include="Net\Imap\ImapEngine.cs" />
     <Compile Include="Net\Imap\ImapFolder.cs" />
@@ -151,8 +153,6 @@
     <Compile Include="IMailTransport.cs" />
     <Compile Include="IMessageSummary.cs" />
     <Compile Include="IProtocolLogger.cs" />
-    <Compile Include="ISortable.cs" />
-    <Compile Include="IThreadable.cs" />
     <Compile Include="ITransferProgress.cs" />
     <Compile Include="MailFolder.cs" />
     <Compile Include="MailService.cs" />
@@ -163,6 +163,7 @@
     <Compile Include="MessageFlags.cs" />
     <Compile Include="MessageFlagsChangedEventArgs.cs" />
     <Compile Include="MessageLabelsChangedEventArgs.cs" />
+    <Compile Include="MessageNotFoundException.cs" />
     <Compile Include="MessagesArrivedEventArgs.cs" />
     <Compile Include="MessageSentEventArgs.cs" />
     <Compile Include="MessageSorter.cs" />

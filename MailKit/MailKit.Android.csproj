@@ -23,7 +23,7 @@
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\lib\MonoAndroid</OutputPath>
     <IntermediateOutputPath>obj\Debug\lib\MonoAndroid</IntermediateOutputPath>
-    <DefineConstants>DEBUG;__MOBILE__;__ANDROID__;</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;SERIALIZABLE;__MOBILE__;__ANDROID__;</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <AndroidLinkMode>None</AndroidLinkMode>
@@ -34,7 +34,7 @@
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\lib\MonoAndroid</OutputPath>
     <IntermediateOutputPath>obj\Release\lib\MonoAndroid</IntermediateOutputPath>
-    <DefineConstants>__MOBILE__;__ANDROID__;</DefineConstants>
+    <DefineConstants>SERIALIZABLE;__MOBILE__;__ANDROID__;</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
@@ -55,7 +55,7 @@
     <Reference Include="Mono.Android" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\MimeKit\MimeKit\MimeKit.Android.csproj">
+    <ProjectReference Include="..\submodules\MimeKit\MimeKit\MimeKit.Android.csproj">
       <Project>{004B4019-62B7-4A15-AF2C-C20968845C46}</Project>
       <Name>MimeKit.Android</Name>
     </ProjectReference>
@@ -65,6 +65,7 @@
     <Compile Include="Net\Imap\ImapClient.cs" />
     <Compile Include="Net\Imap\ImapCommand.cs" />
     <Compile Include="Net\Imap\ImapCommandException.cs" />
+    <Compile Include="Net\Imap\ImapCommandResponse.cs" />
     <Compile Include="Net\Imap\ImapEncoding.cs" />
     <Compile Include="Net\Imap\ImapEngine.cs" />
     <Compile Include="Net\Imap\ImapFolder.cs" />
@@ -162,8 +163,6 @@
     <Compile Include="IMailTransport.cs" />
     <Compile Include="IMessageSummary.cs" />
     <Compile Include="IProtocolLogger.cs" />
-    <Compile Include="ISortable.cs" />
-    <Compile Include="IThreadable.cs" />
     <Compile Include="ITransferProgress.cs" />
     <Compile Include="MailFolder.cs" />
     <Compile Include="MailService.cs" />
@@ -174,6 +173,7 @@
     <Compile Include="MessageFlags.cs" />
     <Compile Include="MessageFlagsChangedEventArgs.cs" />
     <Compile Include="MessageLabelsChangedEventArgs.cs" />
+    <Compile Include="MessageNotFoundException.cs" />
     <Compile Include="MessagesArrivedEventArgs.cs" />
     <Compile Include="MessageSentEventArgs.cs" />
     <Compile Include="MessageSorter.cs" />

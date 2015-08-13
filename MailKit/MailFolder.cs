@@ -53,6 +53,8 @@ namespace MailKit {
 		protected static readonly MessageFlags SettableFlags = MessageFlags.Answered | MessageFlags.Deleted |
 			MessageFlags.Draft | MessageFlags.Flagged | MessageFlags.Seen;
 
+		IMailFolder parent;
+
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MailKit.MailFolder"/> class.
 		/// </summary>
@@ -84,7 +86,19 @@ namespace MailKit {
 		/// </remarks>
 		/// <value>The parent folder.</value>
 		public IMailFolder ParentFolder {
-			get; protected set;
+			get { return parent; }
+			internal protected set {
+				if (value == parent)
+					return;
+
+				if (parent != null)
+					parent.Renamed -= OnParentFolderRenamed;
+
+				parent = value;
+
+				if (parent != null)
+					parent.Renamed += OnParentFolderRenamed;
+			}
 		}
 
 		/// <summary>
@@ -358,7 +372,7 @@ namespace MailKit {
 		/// <exception cref="CommandException">
 		/// The command failed.
 		/// </exception>
-		public abstract FolderAccess Open (FolderAccess access, UniqueId uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken));
+		public abstract FolderAccess Open (FolderAccess access, uint uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Asynchronously opens the folder using the requested folder access.
@@ -410,7 +424,7 @@ namespace MailKit {
 		/// <exception cref="CommandException">
 		/// The command failed.
 		/// </exception>
-		public virtual Task<FolderAccess> OpenAsync (FolderAccess access, UniqueId uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken))
+		public virtual Task<FolderAccess> OpenAsync (FolderAccess access, uint uidValidity, ulong highestModSeq, IList<UniqueId> uids, CancellationToken cancellationToken = default (CancellationToken))
 		{
 			if (access != FolderAccess.ReadOnly && access != FolderAccess.ReadWrite)
 				throw new ArgumentOutOfRangeException ("access");
@@ -6495,6 +6509,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -6533,6 +6550,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -6580,6 +6600,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -6618,6 +6641,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -6672,6 +6698,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -6714,6 +6743,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -6769,6 +6801,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -6812,6 +6847,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -6866,6 +6904,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -6908,6 +6949,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -6966,6 +7010,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7009,6 +7056,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message body.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -7072,6 +7122,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7120,6 +7173,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -7182,6 +7238,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7229,6 +7288,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -7299,6 +7361,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7366,6 +7431,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -7435,6 +7503,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7502,6 +7573,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7566,6 +7640,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7610,6 +7687,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -7676,6 +7756,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7730,6 +7813,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -7792,6 +7878,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7836,6 +7925,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -7904,6 +7996,9 @@ namespace MailKit {
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
 		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
+		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
 		/// </exception>
@@ -7957,6 +8052,9 @@ namespace MailKit {
 		/// </exception>
 		/// <exception cref="FolderNotOpenException">
 		/// The folder is not currently open.
+		/// </exception>
+		/// <exception cref="MessageNotFoundException">
+		/// The <see cref="IMailStore"/> did not return the requested message stream.
 		/// </exception>
 		/// <exception cref="System.OperationCanceledException">
 		/// The operation was canceled via the cancellation token.
@@ -14921,6 +15019,50 @@ namespace MailKit {
 		}
 
 		/// <summary>
+		/// Occurs when the folder is opened.
+		/// </summary>
+		/// <remarks>
+		/// The <see cref="Opened"/> event is emitted when the folder is opened.
+		/// </remarks>
+		public event EventHandler<EventArgs> Opened;
+
+		/// <summary>
+		/// Raise the opened event.
+		/// </summary>
+		/// <remarks>
+		/// Raises the opened event.
+		/// </remarks>
+		protected virtual void OnOpened ()
+		{
+			var handler = Opened;
+
+			if (handler != null)
+				handler (this, EventArgs.Empty);
+		}
+
+		/// <summary>
+		/// Occurs when the folder is closed.
+		/// </summary>
+		/// <remarks>
+		/// The <see cref="Closed"/> event is emitted when the folder is closed.
+		/// </remarks>
+		public event EventHandler<EventArgs> Closed;
+
+		/// <summary>
+		/// Raise the closed event.
+		/// </summary>
+		/// <remarks>
+		/// Raises the closed event.
+		/// </remarks>
+		internal protected virtual void OnClosed ()
+		{
+			var handler = Closed;
+
+			if (handler != null)
+				handler (this, EventArgs.Empty);
+		}
+
+		/// <summary>
 		/// Occurs when the folder is deleted.
 		/// </summary>
 		/// <remarks>
@@ -14964,6 +15106,28 @@ namespace MailKit {
 
 			if (handler != null)
 				handler (this, new FolderRenamedEventArgs (oldName, newName));
+		}
+
+		/// <summary>
+		/// Notifies the folder that a parent folder has been renamed.
+		/// </summary>
+		/// <remarks>
+		/// <see cref="IMailFolder"/> implementations should override this method
+		/// to update their state (such as updating their <see cref="FullName"/>
+		/// property).
+		/// </remarks>
+		protected virtual void OnParentFolderRenamed ()
+		{
+		}
+
+		void OnParentFolderRenamed (object sender, FolderRenamedEventArgs e)
+		{
+			var oldFullName = FullName;
+
+			OnParentFolderRenamed ();
+
+			if (FullName != oldFullName)
+				OnRenamed (oldFullName, FullName);
 		}
 
 		/// <summary>

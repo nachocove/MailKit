@@ -1,9 +1,12 @@
 # MailKit
 
-<a href="https://scan.coverity.com/projects/3202">
-  <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/3202/badge.svg"/>
-</a>
+[![Issue Stats](http://www.issuestats.com/github/jstedfast/MailKit/badge/pr)](http://www.issuestats.com/github/jstedfast/MailKit)
+[![Issue Stats](http://www.issuestats.com/github/jstedfast/MailKit/badge/issue)](http://www.issuestats.com/github/jstedfast/MailKit)
+
+|             |Build Status|Code Coverage|Static Analysis|
+|-------------|:----------:|:-----------:|:-------------:|
+|**Linux/Mac**|[![Build Status](https://travis-ci.org/jstedfast/MailKit.svg)](https://travis-ci.org/jstedfast/MailKit)|[![Code Coverage](https://coveralls.io/repos/jstedfast/MailKit/badge.svg?branch=HEAD)](https://coveralls.io/r/jstedfast/MailKit?branch=HEAD)|[![Static Analysis](https://scan.coverity.com/projects/3202/badge.svg)](https://scan.coverity.com/projects/3202)|
+|**Windows**  |[![Build Status](https://ci.appveyor.com/api/projects/status/fd38t1ri3cmujnpq/branch/master?svg=true)](https://ci.appveyor.com/project/jstedfast/mailkit/branch/master)|[![Code Coverage](https://coveralls.io/repos/jstedfast/MailKit/badge.svg?branch=HEAD)](https://coveralls.io/r/jstedfast/MailKit?branch=HEAD)|[![Static Analysis](https://scan.coverity.com/projects/3202/badge.svg)](https://scan.coverity.com/projects/3202)|
 
 ## What is MailKit?
 
@@ -139,24 +142,17 @@ simply enter the following command:
 
 ## Building
 
-First, you'll need to clone MailKit, MimeKit, Bouncy Castle, and Portable.Text.Encoding from my GitHub repository:
+First, you'll need to clone MailKit from my GitHub repository:
 
     git clone https://github.com/jstedfast/MailKit.git
-    git clone https://github.com/jstedfast/MimeKit.git
-    git clone https://github.com/jstedfast/bc-csharp.git
-    git clone https://github.com/jstedfast/Portable.Text.Encoding.git
-
-Currently, MailKit (through its use of MimeKit) depends on the vs2010 branch of bc-csharp for the
-Visual Studio 2010 project files that I've added (to replace the Visual Studio 2003 project files).
-To switch to that branch,
-
-    cd bc-csharp
-    git checkout -b vs2010 origin/vs2010
+    cd MailKit
+    git submodule update --init --recursive
 
 In the top-level MailKit source directory, there are three solution files: MailKit.sln, MailKit.Net40.sln and MailKit.Mobile.sln.
 
 * MailKit.sln includes the projects for .NET 4.5, .NET 4.0, Xamarin.Android, and Xamarin.iOS.
-* MailKit.Net40.sln just includes the .NET Framework 4.0 C# project (MailKit/MailKit.Net40.csproj)
+* MailKit.Net45.sln includes the .NET 4.5 project and the unit tests.
+* MailKit.Net40.sln just includes the .NET 4.0 project.
 * MailKit.Mobile.sln just includes the Xamarin.iOS and Xamarin.Android projects.
 * MailKit.Win.sln just includes the Windows 8.1 Universal project (aka wpa81).
 
@@ -454,6 +450,13 @@ Have a bug or a feature request? [Please open a new issue](https://github.com/js
 
 Before opening a new issue, please search for existing issues to avoid submitting duplicates.
 
+If you are submitting a bug about an unexpected token being encountered, please include a [protocol
+log](https://github.com/jstedfast/MailKit/blob/master/FAQ.md#ProtocolLog) in your bug report, otherwise
+there is nothing I can do to fix the problem.
+
 ## Documentation
 
 API documentation can be found at [http://mimekit.net/docs](http://mimekit.net/docs).
+
+A copy of the xml formatted API documentation is also included in the NuGet and/or
+Xamarin Component package.

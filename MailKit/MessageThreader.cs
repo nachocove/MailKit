@@ -28,7 +28,9 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 
+using MimeKit;
 using MimeKit.Utils;
+
 using MailKit.Search;
 
 namespace MailKit {
@@ -40,11 +42,11 @@ namespace MailKit {
 	/// </remarks>
 	public static class MessageThreader
 	{
-		class ThreadableNode : ISortable
+		class ThreadableNode : IMessageSummary
 		{
 			public readonly List<ThreadableNode> Children = new List<ThreadableNode> ();
+			public IMessageSummary Message;
 			public ThreadableNode Parent;
-			public IThreadable Message;
 
 			public bool HasParent {
 				get { return Parent != null; }
@@ -54,97 +56,105 @@ namespace MailKit {
 				get { return Children.Count > 0; }
 			}
 
-			public string ThreadableSubject {
-				get {
-					if (Message != null)
-						return Message.ThreadableSubject;
-
-					return Children[0].ThreadableSubject;
-				}
+			public MessageSummaryItems Fields {
+				get { return MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope; }
 			}
 
-			#region ISortable implementation
-
-			bool ISortable.CanSort {
-				get { return true; }
+			public BodyPart Body {
+				get { return null; }
 			}
 
-			int ISortable.SortableIndex {
-				get {
-					if (Message != null)
-						return Message.SortableIndex;
-
-					return ((ISortable) Children[0]).SortableIndex;
-				}
+			public BodyPartText TextBody {
+				get { return null; }
 			}
 
-			string ISortable.SortableCc {
-				get {
-					if (Message != null)
-						return Message.SortableCc;
-
-					return ((ISortable) Children[0]).SortableCc;
-				}
+			public BodyPartText HtmlBody {
+				get { return null; }
 			}
 
-			DateTimeOffset ISortable.SortableDate {
-				get {
-					if (Message != null)
-						return Message.SortableDate;
-
-					return ((ISortable) Children[0]).SortableDate;
-				}
+			public IEnumerable<BodyPartBasic> BodyParts {
+				get { yield break; }
 			}
 
-			string ISortable.SortableFrom {
-				get {
-					if (Message != null)
-						return Message.SortableFrom;
-
-					return ((ISortable) Children[0]).SortableFrom;
-				}
+			public IEnumerable<BodyPartBasic> Attachments {
+				get { yield break; }
 			}
 
-			uint ISortable.SortableSize {
-				get {
-					if (Message != null)
-						return Message.SortableSize;
-
-					return ((ISortable) Children[0]).SortableSize;
-				}
+			public Envelope Envelope {
+				get { return Message != null ? Message.Envelope : Children[0].Envelope; }
 			}
 
-			string ISortable.SortableSubject {
-				get {
-					if (Message != null)
-						return Message.SortableSubject;
-
-					return ((ISortable) Children[0]).SortableSubject;
-				}
+			public string NormalizedSubject {
+				get { return Message != null ? Message.NormalizedSubject : Children[0].NormalizedSubject; }
 			}
 
-			string ISortable.SortableTo {
-				get {
-					if (Message != null)
-						return Message.SortableTo;
-
-					return ((ISortable) Children[0]).SortableTo;
-				}
+			public DateTimeOffset Date {
+				get { return Message != null ? Message.Date : Children[0].Date; }
 			}
 
-			#endregion
+			public bool IsReply {
+				get { return Message != null && Message.IsReply; }
+			}
+
+			public MessageFlags? Flags {
+				get { return Message != null ? Message.Flags : Children[0].Flags; }
+			}
+
+			public HashSet<string> UserFlags {
+				get { return Message != null ? Message.UserFlags : Children[0].UserFlags; }
+			}
+
+			public HeaderList Headers {
+				get { return Message != null ? Message.Headers : Children[0].Headers; }
+			}
+
+			public DateTimeOffset? InternalDate {
+				get { return Message != null ? Message.InternalDate : Children[0].InternalDate; }
+			}
+
+			public uint? Size {
+				get { return Message != null ? Message.Size : Children[0].Size; }
+			}
+
+			public ulong? ModSeq {
+				get { return Message != null ? Message.ModSeq : Children[0].ModSeq; }
+			}
+
+			public MessageIdList References {
+				get { return Message != null ? Message.References : Children[0].References; }
+			}
+
+			public UniqueId UniqueId {
+				get { return Message != null ? Message.UniqueId : Children[0].UniqueId; }
+			}
+
+			public int Index {
+				get { return Message != null ? Message.Index : Children[0].Index; }
+			}
+
+			public ulong? GMailMessageId {
+				get { return Message != null ? Message.GMailMessageId : Children[0].GMailMessageId; }
+			}
+
+			public ulong? GMailThreadId {
+				get { return Message != null ? Message.GMailThreadId : Children[0].GMailThreadId; }
+			}
+
+			public IList<string> GMailLabels {
+				get { return Message != null ? Message.GMailLabels : Children[0].GMailLabels; }
+			}
 		}
 
-		static IDictionary<string, ThreadableNode> CreateIdTable (IEnumerable<IThreadable> messages)
+		static IDictionary<string, ThreadableNode> CreateIdTable (IEnumerable<IMessageSummary> messages)
 		{
 			var ids = new Dictionary<string, ThreadableNode> ();
 			ThreadableNode node;
 
 			foreach (var message in messages) {
-				if (!message.CanThread)
+				if (message.Envelope == null)
 					throw new ArgumentException ("One or more messages is missing information needed for threading.", "messages");
 
-				var id = message.ThreadableMessageId;
+				var id = message.Envelope.MessageId;
 
 				if (string.IsNullOrEmpty (id))
 					id = MimeUtils.GenerateMessageId ();
@@ -168,7 +178,7 @@ namespace MailKit {
 				}
 
 				ThreadableNode parent = null;
-				foreach (var reference in message.ThreadableReferences) {
+				foreach (var reference in message.References) {
 					ThreadableNode referenced;
 
 					if (!ids.TryGetValue (reference, out referenced)) {
@@ -256,7 +266,7 @@ namespace MailKit {
 
 			for (int i = 0; i < root.Children.Count; i++) {
 				var current = root.Children[i];
-				var subject = current.ThreadableSubject;
+				var subject = current.NormalizedSubject;
 
 				// don't thread messages with empty subjects
 				if (string.IsNullOrEmpty (subject))
@@ -264,8 +274,8 @@ namespace MailKit {
 
 				if (!subjects.TryGetValue (subject, out match) ||
 					(current.Message == null && match.Message != null) ||
-					(match.Message != null && match.Message.IsThreadableReply &&
-						current.Message != null && !current.Message.IsThreadableReply)) {
+					(match.Message != null && match.Message.IsReply &&
+						current.Message != null && !current.Message.IsReply)) {
 					subjects[subject] = current;
 					count++;
 				}
@@ -276,7 +286,7 @@ namespace MailKit {
 
 			for (int i = 0; i < root.Children.Count; i++) {
 				var current = root.Children[i];
-				var subject = current.ThreadableSubject;
+				var subject = current.NormalizedSubject;
 
 				// don't thread messages with empty subjects
 				if (string.IsNullOrEmpty (subject))
@@ -301,7 +311,7 @@ namespace MailKit {
 					// is not, make the current message a child of the message in the subject
 					// table (a sibling of its children).
 					match.Children.Add (current);
-				} else if (current.Message.IsThreadableReply && !match.Message.IsThreadableReply) {
+				} else if (current.Message.IsReply && !match.Message.IsReply) {
 					// If the current message is a reply or forward and the message in the
 					// subject table is not, make the current message a child of the message
 					// in the subject table (a sibling of its children).
@@ -331,24 +341,24 @@ namespace MailKit {
 			}
 		}
 
-		static void GetThreads (ThreadableNode root, List<MessageThread> threads, OrderBy[] orderBy)
+		static void GetThreads (ThreadableNode root, IList<MessageThread> threads, IList<OrderBy> orderBy)
 		{
-			var sorted = MessageSorter.Sort (root.Children, orderBy);
+			root.Children.Sort (orderBy);
 
-			for (int i = 0; i < sorted.Count; i++) {
-				var message = sorted[i].Message;
+			for (int i = 0; i < root.Children.Count; i++) {
+				var message = root.Children[i].Message;
 				UniqueId? uid = null;
 
 				if (message != null)
-					uid = message.ThreadableUniqueId;
+					uid = message.UniqueId;
 
 				var thread = new MessageThread (uid);
-				GetThreads (sorted[i], thread.children, orderBy);
+				GetThreads (root.Children[i], thread.Children, orderBy);
 				threads.Add (thread);
 			}
 		}
 
-		static IList<MessageThread> ThreadByReferences (IEnumerable<IThreadable> messages, OrderBy[] orderBy)
+		static IList<MessageThread> ThreadByReferences (IEnumerable<IMessageSummary> messages, IList<OrderBy> orderBy)
 		{
 			var threads = new List<MessageThread> ();
 			var ids = CreateIdTable (messages);
@@ -362,13 +372,13 @@ namespace MailKit {
 			return threads;
 		}
 
-		static IList<MessageThread> ThreadBySubject (IEnumerable<IThreadable> messages, OrderBy[] orderBy)
+		static IList<MessageThread> ThreadBySubject (IEnumerable<IMessageSummary> messages, IList<OrderBy> orderBy)
 		{
 			var threads = new List<MessageThread> ();
 			var root = new ThreadableNode ();
 
 			foreach (var message in messages) {
-				if (!message.CanThread)
+				if (message.Envelope == null)
 					throw new ArgumentException ("One or more messages is missing information needed for threading.", "messages");
 
 				var container = new ThreadableNode ();
@@ -391,8 +401,8 @@ namespace MailKit {
 		/// Thread the messages according to the specified threading algorithm.
 		/// </remarks>
 		/// <returns>The threaded messages.</returns>
-		/// <param name="algorithm">The threading algorithm.</param>
 		/// <param name="messages">The messages.</param>
+		/// <param name="algorithm">The threading algorithm.</param>
 		/// <exception cref="System.ArgumentNullException">
 		/// <paramref name="messages"/> is <c>null</c>.
 		/// </exception>
@@ -402,9 +412,9 @@ namespace MailKit {
 		/// <exception cref="System.ArgumentException">
 		/// <paramref name="messages"/> contains one or more items that is missing information needed for threading.
 		/// </exception>
-		public static IList<MessageThread> Thread (ThreadingAlgorithm algorithm, IEnumerable<IThreadable> messages)
+		public static IList<MessageThread> Thread (this IEnumerable<IMessageSummary> messages, ThreadingAlgorithm algorithm)
 		{
-			return Thread (algorithm, messages, new [] { OrderBy.Arrival });
+			return Thread (messages, algorithm, new [] { OrderBy.Arrival });
 		}
 
 		/// <summary>
@@ -416,8 +426,8 @@ namespace MailKit {
 		/// and sorts the resulting threads by the specified ordering.
 		/// </remarks>
 		/// <returns>The threaded messages.</returns>
-		/// <param name="algorithm">The threading algorithm.</param>
 		/// <param name="messages">The messages.</param>
+		/// <param name="algorithm">The threading algorithm.</param>
 		/// <param name="orderBy">The requested sort ordering.</param>
 		/// <exception cref="System.ArgumentNullException">
 		/// <para><paramref name="messages"/> is <c>null</c>.</para>
@@ -428,15 +438,20 @@ namespace MailKit {
 		/// <paramref name="algorithm"/> is not a valid threading algorithm.
 		/// </exception>
 		/// <exception cref="System.ArgumentException">
-		/// <paramref name="messages"/> contains one or more items that is missing information needed for threading or sorting.
+		/// <para><paramref name="messages"/> contains one or more items that is missing information needed for threading or sorting.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="orderBy"/> is an empty list.</para>
 		/// </exception>
-		public static IList<MessageThread> Thread (ThreadingAlgorithm algorithm, IEnumerable<IThreadable> messages, OrderBy[] orderBy)
+		public static IList<MessageThread> Thread (this IEnumerable<IMessageSummary> messages, ThreadingAlgorithm algorithm, IList<OrderBy> orderBy)
 		{
 			if (messages == null)
 				throw new ArgumentNullException ("messages");
 
 			if (orderBy == null)
 				throw new ArgumentNullException ("orderBy");
+
+			if (orderBy.Count == 0)
+				throw new ArgumentException ("No sort order provided.", "orderBy");
 
 			switch (algorithm) {
 			case ThreadingAlgorithm.OrderedSubject: return ThreadBySubject (messages, orderBy);

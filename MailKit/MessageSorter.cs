@@ -25,8 +25,10 @@
 //
 
 using System;
+using System.Linq;
 using System.Collections.Generic;
 
+using MimeKit;
 using MailKit.Search;
 
 namespace MailKit {
@@ -38,43 +40,97 @@ namespace MailKit {
 	/// </remarks>
 	public static class MessageSorter
 	{
-		class MessageComparer<T> : IComparer<T> where T : ISortable
+		class MessageComparer<T> : IComparer<T> where T : IMessageSummary
 		{
-			readonly OrderBy[] orderBy;
+			readonly IList<OrderBy> orderBy;
 
-			public MessageComparer (OrderBy[] orderBy)
+			public MessageComparer (IList<OrderBy> orderBy)
 			{
 				this.orderBy = orderBy;
 			}
 
 			#region IComparer implementation
 
+			static int CompareDisplayNames (InternetAddressList list1, InternetAddressList list2)
+			{
+				var m1 = list1.Mailboxes.GetEnumerator ();
+				var m2 = list2.Mailboxes.GetEnumerator ();
+				bool n1 = m1.MoveNext ();
+				bool n2 = m2.MoveNext ();
+
+				while (n1 && n2) {
+					var name1 = m1.Current.Name ?? string.Empty;
+					var name2 = m2.Current.Name ?? string.Empty;
+					int cmp;
+
+					if ((cmp = string.Compare (name1, name2, StringComparison.OrdinalIgnoreCase)) != 0)
+						return cmp;
+
+					n1 = m1.MoveNext ();
+					n2 = m2.MoveNext ();
+				}
+
+				return n1 ? 1 : (n2 ? -1  : 0);
+			}
+
+			static int CompareMailboxAddresses (InternetAddressList list1, InternetAddressList list2)
+			{
+				var m1 = list1.Mailboxes.GetEnumerator ();
+				var m2 = list2.Mailboxes.GetEnumerator ();
+				bool n1 = m1.MoveNext ();
+				bool n2 = m2.MoveNext ();
+
+				while (n1 && n2) {
+					int cmp;
+
+					if ((cmp = string.Compare (m1.Current.Address, m2.Current.Address, StringComparison.OrdinalIgnoreCase)) != 0)
+						return cmp;
+
+					n1 = m1.MoveNext ();
+					n2 = m2.MoveNext ();
+				}
+
+				return n1 ? 1 : (n2 ? -1  : 0);
+			}
+
 			public int Compare (T x, T y)
 			{
 				int cmp = 0;
 
-				for (int i = 0; i < orderBy.Length; i++) {
+				for (int i = 0; i < orderBy.Count; i++) {
 					switch (orderBy[i].Type) {
 					case OrderByType.Arrival:
-						cmp = x.SortableIndex.CompareTo (y.SortableIndex);
+						cmp = x.Index.CompareTo (y.Index);
 						break;
 					case OrderByType.Cc:
-						cmp = string.Compare (x.SortableCc, y.SortableCc, StringComparison.OrdinalIgnoreCase);
+						cmp = CompareMailboxAddresses (x.Envelope.Cc, y.Envelope.Cc);
 						break;
 					case OrderByType.Date:
-						cmp = x.SortableDate.CompareTo (y.SortableDate);
+						cmp = x.Date.CompareTo (y.Date);
+						break;
+					case OrderByType.DisplayFrom:
+						cmp = CompareDisplayNames (x.Envelope.From, y.Envelope.From);
 						break;
 					case OrderByType.From:
-						cmp = string.Compare (x.SortableFrom, y.SortableFrom, StringComparison.OrdinalIgnoreCase);
+						cmp = CompareMailboxAddresses (x.Envelope.From, y.Envelope.From);
 						break;
 					case OrderByType.Size:
-						cmp = x.SortableSize.CompareTo (y.SortableSize);
+						var xsize = x.Size ?? 0;
+						var ysize = y.Size ?? 0;
+
+						cmp = xsize.CompareTo (ysize);
 						break;
 					case OrderByType.Subject:
-						cmp = string.Compare (x.SortableSubject, y.SortableSubject, StringComparison.OrdinalIgnoreCase);
+						var xsubject = x.Envelope.Subject ?? string.Empty;
+						var ysubject = y.Envelope.Subject ?? string.Empty;
+
+						cmp = string.Compare (xsubject, ysubject, StringComparison.OrdinalIgnoreCase);
+						break;
+					case OrderByType.DisplayTo:
+						cmp = CompareDisplayNames (x.Envelope.To, y.Envelope.To);
 						break;
 					case OrderByType.To:
-						cmp = string.Compare (x.SortableTo, y.SortableTo, StringComparison.OrdinalIgnoreCase);
+						cmp = CompareMailboxAddresses (x.Envelope.To, y.Envelope.To);
 						break;
 					}
 
@@ -106,9 +162,11 @@ namespace MailKit {
 		/// <para><paramref name="orderBy"/> is <c>null</c>.</para>
 		/// </exception>
 		/// <exception cref="System.ArgumentException">
-		/// <paramref name="orderBy"/> is an empty list.
+		/// <para><paramref name="messages"/> contains one or more items that is missing information needed for sorting.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="orderBy"/> is an empty list.</para>
 		/// </exception>
-		public static IList<T> Sort<T> (IEnumerable<T> messages, OrderBy[] orderBy) where T : ISortable
+		public static IList<T> Sort<T> (this IEnumerable<T> messages, IList<OrderBy> orderBy) where T : IMessageSummary
 		{
 			if (messages == null)
 				throw new ArgumentNullException ("messages");
@@ -116,12 +174,12 @@ namespace MailKit {
 			if (orderBy == null)
 				throw new ArgumentNullException ("orderBy");
 
-			if (orderBy.Length == 0)
+			if (orderBy.Count == 0)
 				throw new ArgumentException ("No sort order provided.", "orderBy");
 
 			var list = new List<T> ();
 			foreach (var message in messages) {
-				if (!message.CanSort)
+				if (message.Envelope == null)
 					throw new ArgumentException ("One or more messages is missing information needed for sorting.", "messages");
 
 				list.Add (message);
@@ -135,6 +193,50 @@ namespace MailKit {
 			list.Sort (comparer);
 
 			return list;
+		}
+
+		/// <summary>
+		/// Sorts the messages by the specified ordering.
+		/// </summary>
+		/// <remarks>
+		/// Sorts the messages by the specified ordering.
+		/// </remarks>
+		/// <returns>The sorted messages.</returns>
+		/// <typeparam name="T">The message items must implement the <see cref="ISortable"/> interface.</typeparam>
+		/// <param name="messages">The messages to sort.</param>
+		/// <param name="orderBy">The sort ordering.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="messages"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="orderBy"/> is <c>null</c>.</para>
+		/// </exception>
+		/// <exception cref="System.ArgumentException">
+		/// <para><paramref name="messages"/> contains one or more items that is missing information needed for sorting.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="orderBy"/> is an empty list.</para>
+		/// </exception>
+		public static void Sort<T> (this List<T> messages, IList<OrderBy> orderBy) where T : IMessageSummary
+		{
+			if (messages == null)
+				throw new ArgumentNullException ("messages");
+
+			if (orderBy == null)
+				throw new ArgumentNullException ("orderBy");
+
+			if (orderBy.Count == 0)
+				throw new ArgumentException ("No sort order provided.", "orderBy");
+
+			for (int i = 0; i < messages.Count; i++) {
+				if (messages[i].Envelope == null)
+					throw new ArgumentException ("One or more messages is missing information needed for sorting.", "messages");
+			}
+
+			if (messages.Count < 2)
+				return;
+
+			var comparer = new MessageComparer<T> (orderBy);
+
+			messages.Sort (comparer);
 		}
 	}
 }

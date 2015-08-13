@@ -173,13 +173,25 @@ namespace MailKit.Net.Imap {
 		}
 
 		/// <summary>
+		/// Gets the internationalization level supported by the IMAP server.
+		/// </summary>
+		/// <remarks>
+		/// <para>Gets the internationalization level supported by the IMAP server.</para>
+		/// <para>For more information, see
+		/// <a href="https://tools.ietf.org/html/rfc5255#section-4">section 4 of rfc5255</a>.</para>
+		/// </remarks>
+		/// <value>The internationalization level.</value>
+		public int InternationalizationLevel {
+			get { return engine.I18NLevel; }
+		}
+
+		/// <summary>
 		/// Get the access rights supported by the IMAP server.
 		/// </summary>
 		/// <remarks>
 		/// These rights are additional rights supported by the IMAP server beyond the standard rights
-		/// defined in <a href="https://tools.ietf.org/html/rfc4314#section-2.1">section 2.1</a> of
-		/// <a href="https://tools.ietf.org/html/rfc4314">rfc4314</a> and will not be populated until
-		/// the client is successfully connected.
+		/// defined in <a href="https://tools.ietf.org/html/rfc4314#section-2.1">section 2.1 of rfc4314</a>
+		/// and will not be populated until the client is successfully connected.
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\ImapExamples.cs" region="Capabilities"/>
@@ -281,7 +293,7 @@ namespace MailKit.Net.Imap {
 
 			engine.Wait (ic);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("COMPRESS", ic);
 
 			var unzip = new DeflateStream (engine.Stream.Stream, CompressionMode.Decompress);
@@ -401,7 +413,7 @@ namespace MailKit.Net.Imap {
 
 			engine.Wait (ic);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("ENABLE", ic);
 
 			engine.QResyncEnabled = true;
@@ -460,7 +472,7 @@ namespace MailKit.Net.Imap {
 
 			engine.Wait (ic);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("ENABLE", ic);
 
 			engine.UTF8Enabled = true;
@@ -592,7 +604,7 @@ namespace MailKit.Net.Imap {
 			engine.QueueCommand (ic);
 			engine.Wait (ic);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("ID", ic);
 
 			return (ImapImplementation) ic.UserData;
@@ -747,7 +759,7 @@ namespace MailKit.Net.Imap {
 
 		static AuthenticationException CreateAuthenticationException (ImapCommand ic)
 		{
-			if (string.IsNullOrEmpty (ic.ResultText)) {
+			if (string.IsNullOrEmpty (ic.ResponseText)) {
 				for (int i = 0; i < ic.RespCodes.Count; i++) {
 					if (ic.RespCodes[i].IsError)
 						return new AuthenticationException (ic.RespCodes[i].Message);
@@ -756,7 +768,7 @@ namespace MailKit.Net.Imap {
 				return new AuthenticationException ();
 			}
 
-			return new AuthenticationException (ic.ResultText);
+			return new AuthenticationException (ic.ResponseText);
 		}
 
 		static bool IsHexDigit (char c)
@@ -959,7 +971,7 @@ namespace MailKit.Net.Imap {
 
 				engine.Wait (ic);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					continue;
 
 				engine.State = ImapEngineState.Authenticated;
@@ -978,7 +990,7 @@ namespace MailKit.Net.Imap {
 
 				engine.QueryNamespaces (cancellationToken);
 				engine.QuerySpecialFolders (cancellationToken);
-				OnAuthenticated (ic.ResultText);
+				OnAuthenticated (ic.ResponseText);
 				return;
 			}
 
@@ -996,7 +1008,7 @@ namespace MailKit.Net.Imap {
 
 			engine.Wait (ic);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw CreateAuthenticationException (ic);
 
 			engine.State = ImapEngineState.Authenticated;
@@ -1014,10 +1026,10 @@ namespace MailKit.Net.Imap {
 
 			engine.QueryNamespaces (cancellationToken);
 			engine.QuerySpecialFolders (cancellationToken);
-			OnAuthenticated (ic.ResultText);
+			OnAuthenticated (ic.ResponseText);
 		}
 
-		internal void ReplayConnect (string host, Stream replayStream, CancellationToken cancellationToken)
+		internal void ReplayConnect (string host, Stream replayStream, CancellationToken cancellationToken = default (CancellationToken))
 		{
 			CheckDisposed ();
 
@@ -1231,7 +1243,7 @@ namespace MailKit.Net.Imap {
 
 					engine.Wait (ic);
 
-					if (ic.Result == ImapCommandResult.Ok) {
+					if (ic.Response == ImapCommandResponse.Ok) {
 #if !NETFX_CORE
 						var tls = new SslStream (stream, false, ValidateRemoteCertificate);
 						tls.AuthenticateAsClient (host, ClientCertificates, DefaultSslProtocols, true);
@@ -1379,7 +1391,7 @@ namespace MailKit.Net.Imap {
 
 					engine.Wait (ic);
 
-					if (ic.Result == ImapCommandResult.Ok) {
+					if (ic.Response == ImapCommandResponse.Ok) {
 						var tls = new SslStream (stream, false, ValidateRemoteCertificate);
 						tls.AuthenticateAsClient (host, ClientCertificates, DefaultSslProtocols, true);
 						engine.Stream.Stream = tls;
@@ -1570,7 +1582,7 @@ namespace MailKit.Net.Imap {
 		/// <para>When the IMAP server receives a <c>NOOP</c> command, it will reply to the client with a
 		/// list of pending updates such as <c>EXISTS</c> and <c>RECENT</c> counts on the currently
 		/// selected folder. To receive these notifications, subscribe to the
-		/// <see cref="ImapFolder.CountChanged"/> and <see cref="ImapFolder.RecentChanged"/> events,
+		/// <see cref="MailFolder.CountChanged"/> and <see cref="MailFolder.RecentChanged"/> events,
 		/// respectively.</para>
 		/// <para>For more information about the <c>NOOP</c> command, see
 		/// <a href="https://tools.ietf.org/html/rfc3501#section-6.1.2">rfc3501</a>.</para>
@@ -1610,7 +1622,7 @@ namespace MailKit.Net.Imap {
 
 			engine.Wait (ic);
 
-			if (ic.Result != ImapCommandResult.Ok)
+			if (ic.Response != ImapCommandResponse.Ok)
 				throw ImapCommandException.Create ("NOOP", ic);
 		}
 
@@ -1709,7 +1721,7 @@ namespace MailKit.Net.Imap {
 
 				engine.Wait (ic);
 
-				if (ic.Result != ImapCommandResult.Ok)
+				if (ic.Response != ImapCommandResponse.Ok)
 					throw ImapCommandException.Create ("IDLE", ic);
 			}
 		}
