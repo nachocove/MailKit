@@ -1230,7 +1230,7 @@ namespace MailKit.Net.Imap {
 			case ImapResponseCodeType.AppendUid:
 				var append = (AppendUidResponseCode) code;
 
-				if (token.Type != ImapTokenType.Atom || !uint.TryParse ((string) token.Value, out n32) || n32 == 0) {
+				if (token.Type != ImapTokenType.Atom || !uint.TryParse ((string) token.Value, out n32)) {
 					Debug.WriteLine ("Expected nz-number as first argument of the 'APPENDUID' RESP-CODE, but got: {0}", token);
 					throw UnexpectedToken (token, false);
 				}
@@ -1250,7 +1250,7 @@ namespace MailKit.Net.Imap {
 			case ImapResponseCodeType.CopyUid:
 				var copy = (CopyUidResponseCode) code;
 
-				if (token.Type != ImapTokenType.Atom || !uint.TryParse ((string) token.Value, out n32) || n32 == 0) {
+				if (token.Type != ImapTokenType.Atom || !uint.TryParse ((string) token.Value, out n32)) {
 					Debug.WriteLine ("Expected nz-number as first argument of the 'COPYUID' RESP-CODE, but got: {0}", token);
 					throw UnexpectedToken (token, false);
 				}
@@ -1286,7 +1286,7 @@ namespace MailKit.Net.Imap {
 			case ImapResponseCodeType.HighestModSeq:
 				var highest = (HighestModSeqResponseCode) code;
 
-				if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out n64) || n64 == 0) {
+				if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out n64)) {
 					Debug.WriteLine ("Expected 64-bit nz-number as first argument of the 'HIGHESTMODSEQ' RESP-CODE, but got: {0}", token);
 					throw UnexpectedToken (token, false);
 				}

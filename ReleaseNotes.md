@@ -1,5 +1,26 @@
 # Release Notes
 
+### MailKit 1.2.11.1
+
+* Fixed ImapFolder.GetSubfolders() to work with Yahoo! Mail and other IMAP servers that
+  do not use the canonical INBOX naming convention for the INBOX folder. (issue #242)
+
+### MailKit 1.2.11
+
+* Fixed SmtpStream logic for determining if a call to ReadAhead() is needed. (issue #232)
+* Fixed ImapFolder.Close() to change the state to Closed even if the IMAP server does not
+  support the UNSELECT command.
+* Allow the UIDVALIDITY argument to the COPYUID and APPENDUID resp-codes to be 0 even though
+  that value is llegal. Improves compatibility with SmarterMail. (issue #240)
+
+### MailKit 1.2.10
+
+* Added an SslProtocols property to ImapClient, Pop3Client, and SmtpClient to allow
+  developers to override which SSL protocols are to be allowed for SSL connections.
+  (issue #229)
+* Added a work-around for GMail IMAP (and other IMAP servers) that sometimes send an
+  illegal MODSEQ value of 0. (issue #228)
+
 ### MailKit 1.2.9
 
 * Fixed ImapFolder.Append() methods to make sure to encode the message with <CR><LF>

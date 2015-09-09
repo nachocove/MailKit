@@ -474,15 +474,17 @@ namespace MailKit.Net.Imap {
 			} else if ((Engine.Capabilities & ImapCapabilities.Unselect) != 0) {
 				ic = Engine.QueueCommand (cancellationToken, this, "UNSELECT\r\n");
 			} else {
-				return;
+				ic = null;
 			}
 
-			Engine.Wait (ic);
+			if (ic != null) {
+				Engine.Wait (ic);
 
-			ProcessResponseCodes (ic, null);
+				ProcessResponseCodes (ic, null);
 
-			if (ic.Response != ImapCommandResponse.Ok)
-				throw ImapCommandException.Create (expunge ? "CLOSE" : "UNSELECT", ic);
+				if (ic.Response != ImapCommandResponse.Ok)
+					throw ImapCommandException.Create (expunge ? "CLOSE" : "UNSELECT", ic);
+			}
 
 			Engine.State = ImapEngineState.Authenticated;
 			Access = FolderAccess.None;
@@ -886,8 +888,9 @@ namespace MailKit.Net.Imap {
 			prefix = ImapUtils.CanonicalizeMailboxName (prefix, DirectorySeparator);
 			foreach (var folder in list) {
 				var canonicalFullName = ImapUtils.CanonicalizeMailboxName (folder.FullName, folder.DirectorySeparator);
+				var canonicalName = ImapUtils.IsInbox (folder.Name) ? "INBOX" : folder.Name;
 
-				if (canonicalFullName != prefix + folder.Name)
+				if (canonicalFullName != prefix + canonicalName)
 					continue;
 
 				folder.ParentFolder = this;
@@ -2956,7 +2959,7 @@ namespace MailKit.Net.Imap {
 
 					token = engine.ReadToken (ic.CancellationToken);
 
-					if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out value64) || value64 == 0)
+					if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out value64))
 						throw ImapEngine.UnexpectedToken (token, false);
 
 					token = engine.ReadToken (ic.CancellationToken);
@@ -4842,7 +4845,7 @@ namespace MailKit.Net.Imap {
 
 					token = engine.ReadToken (ic.CancellationToken);
 
-					if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out modseq) || modseq == 0)
+					if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out modseq))
 						throw ImapEngine.UnexpectedToken (token, false);
 
 					token = engine.ReadToken (ic.CancellationToken);
@@ -6888,6 +6891,11 @@ namespace MailKit.Net.Imap {
 				if (i > 0)
 					list.Append (' ');
 
+				if (labels[i] == null) {
+					list.Append ("NIL");
+					continue;
+				}
+
 				switch (labels[i]) {
 				case "\\AllMail":
 				case "\\Drafts":
@@ -8004,7 +8012,7 @@ namespace MailKit.Net.Imap {
 					case "MODSEQ":
 						token = engine.ReadToken (ic.CancellationToken);
 
-						if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out modseq) || modseq == 0) {
+						if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out modseq)) {
 							Debug.WriteLine ("Expected 64-bit nz-number as the MODSEQ value, but got: {0}", token);
 							throw ImapEngine.UnexpectedToken (token, false);
 						}
@@ -9190,7 +9198,7 @@ namespace MailKit.Net.Imap {
 
 					token = engine.ReadToken (cancellationToken);
 
-					if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out modseq) || modseq == 0)
+					if (token.Type != ImapTokenType.Atom || !ulong.TryParse ((string) token.Value, out modseq))
 						throw ImapEngine.UnexpectedToken (token, false);
 
 					token = engine.ReadToken (cancellationToken);
