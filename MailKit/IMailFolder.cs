@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -215,8 +215,9 @@ namespace MailKit {
 		/// </summary>
 		/// <remarks>
 		/// <para>Gets the number of unread messages in the folder.</para>
-		/// <para>Note: This value will only be set after calling <see cref="Status(StatusItems, System.Threading.CancellationToken)"/>
-		/// with <see cref="StatusItems.Unread"/>.</para>
+		/// <note type="note">This value will only be set after calling
+		/// <see cref="Status(StatusItems, System.Threading.CancellationToken)"/>
+		/// with <see cref="StatusItems.Unread"/>.</note>
 		/// </remarks>
 		/// <value>The number of unread messages.</value>
 		int Unread { get; }
@@ -226,8 +227,10 @@ namespace MailKit {
 		/// </summary>
 		/// <remarks>
 		/// <para>Gets the number of recently delivered messages in the folder.</para>
-		/// <para>Note: This value will only be set after calling <see cref="Status(StatusItems, System.Threading.CancellationToken)"/>
-		/// with <see cref="StatusItems.Recent"/>.</para>
+		/// <note type="note">
+		/// This value will only be set after calling
+		/// <see cref="Status(StatusItems, System.Threading.CancellationToken)"/>
+		/// with <see cref="StatusItems.Recent"/>.</note>
 		/// </remarks>
 		/// <value>The number of recently delivered messages.</value>
 		int Recent { get; }
@@ -347,6 +350,54 @@ namespace MailKit {
 		Task<IMailFolder> CreateAsync (string name, bool isMessageFolder, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
+		/// Create a new subfolder with the given name.
+		/// </summary>
+		/// <remarks>
+		/// Creates a new subfolder with the given name.
+		/// </remarks>
+		/// <returns>The created folder.</returns>
+		/// <param name="name">The name of the folder to create.</param>
+		/// <param name="specialUses">A list of special uses for the folder being created.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		IMailFolder Create (string name, IEnumerable<SpecialFolder> specialUses, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Asynchronously create a new subfolder with the given name.
+		/// </summary>
+		/// <remarks>
+		/// Asynchronously creates a new subfolder with the given name.
+		/// </remarks>
+		/// <returns>The created folder.</returns>
+		/// <param name="name">The name of the folder to create.</param>
+		/// <param name="specialUses">A list of special uses for the folder being created.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		Task<IMailFolder> CreateAsync (string name, IEnumerable<SpecialFolder> specialUses, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Create a new subfolder with the given name.
+		/// </summary>
+		/// <remarks>
+		/// Creates a new subfolder with the given name.
+		/// </remarks>
+		/// <returns>The created folder.</returns>
+		/// <param name="name">The name of the folder to create.</param>
+		/// <param name="specialUse">The special use for the folder being created.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		IMailFolder Create (string name, SpecialFolder specialUse, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Asynchronously create a new subfolder with the given name.
+		/// </summary>
+		/// <remarks>
+		/// Asynchronously creates a new subfolder with the given name.
+		/// </remarks>
+		/// <returns>The created folder.</returns>
+		/// <param name="name">The name of the folder to create.</param>
+		/// <param name="specialUse">The special use for the folder being created.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		Task<IMailFolder> CreateAsync (string name, SpecialFolder specialUse, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
 		/// Rename the folder.
 		/// </summary>
 		/// <remarks>
@@ -425,6 +476,37 @@ namespace MailKit {
 		/// <returns>An asynchronous task context.</returns>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		Task UnsubscribeAsync (CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Get the subfolders.
+		/// </summary>
+		/// <remarks>
+		/// <para>Gets the subfolders as well as queries the server for the status of the requested items.</para>
+		/// <para>When the <paramref name="items"/> argument is non-empty, this has the equivalent functionality
+		/// of calling <see cref="GetSubfolders(bool,System.Threading.CancellationToken)"/> and then calling
+		/// <see cref="Status(StatusItems,System.Threading.CancellationToken)"/> on each of the returned folders.</para>
+		/// <note type="tip">Using this method is potentially more efficient than querying the status of each returned folder.</note>
+		/// </remarks>
+		/// <returns>The subfolders.</returns>
+		/// <param name="items">The status items to pre-populate.</param>
+		/// <param name="subscribedOnly">If set to <c>true</c>, only subscribed folders will be listed.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		IEnumerable<IMailFolder> GetSubfolders (StatusItems items, bool subscribedOnly = false, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Asynchronously get the subfolders.
+		/// </summary>
+		/// <remarks>
+		/// <para>Asynchronously gets the subfolders as well as queries the server for the status of the requested items.</para>
+		/// <para>When the <paramref name="items"/> argument is non-empty, this has the equivalent functionality
+		/// of calling <see cref="GetSubfoldersAsync(bool,System.Threading.CancellationToken)"/> and then calling
+		/// <see cref="StatusAsync(StatusItems,System.Threading.CancellationToken)"/> on each of the returned folders.</para>
+		/// </remarks>
+		/// <returns>The subfolders.</returns>
+		/// <param name="items">The status items to pre-populate.</param>
+		/// <param name="subscribedOnly">If set to <c>true</c>, only subscribed folders will be listed.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		Task<IEnumerable<IMailFolder>> GetSubfoldersAsync (StatusItems items, bool subscribedOnly = false, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Get the subfolders.
@@ -729,16 +811,81 @@ namespace MailKit {
 		Task<FolderQuota> SetQuotaAsync (uint? messageLimit, uint? storageLimit, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
+		/// Gets the specified metadata.
+		/// </summary>
+		/// <remarks>
+		/// Gets the specified metadata.
+		/// </remarks>
+		/// <returns>The requested metadata value.</returns>
+		/// <param name="tag">The metadata tag.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		string GetMetadata (MetadataTag tag, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Asynchronously gets the specified metadata.
+		/// </summary>
+		/// <remarks>
+		/// Asynchronously gets the specified metadata.
+		/// </remarks>
+		/// <returns>The requested metadata value.</returns>
+		/// <param name="tag">The metadata tag.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		Task<string> GetMetadataAsync (MetadataTag tag, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Gets the specified metadata.
+		/// </summary>
+		/// <remarks>
+		/// Gets the specified metadata.
+		/// </remarks>
+		/// <returns>The requested metadata.</returns>
+		/// <param name="tags">The metadata tags.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		MetadataCollection GetMetadata (IEnumerable<MetadataTag> tags, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Asynchronously gets the specified metadata.
+		/// </summary>
+		/// <remarks>
+		/// Asynchronously gets the specified metadata.
+		/// </remarks>
+		/// <returns>The requested metadata.</returns>
+		/// <param name="tags">The metadata tags.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		Task<MetadataCollection> GetMetadataAsync (IEnumerable<MetadataTag> tags, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Sets the specified metadata.
+		/// </summary>
+		/// <remarks>
+		/// Sets the specified metadata.
+		/// </remarks>
+		/// <param name="metadata">The metadata.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		void SetMetadata (MetadataCollection metadata, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Asynchronously sets the specified metadata.
+		/// </summary>
+		/// <remarks>
+		/// Asynchronously sets the specified metadata.
+		/// </remarks>
+		/// <returns>An asynchronous task context.</returns>
+		/// <param name="metadata">The metadata.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		Task SetMetadataAsync (MetadataCollection metadata, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
 		/// Expunge the folder, permanently removing all messages marked for deletion.
 		/// </summary>
 		/// <remarks>
 		/// <para>Expunges the folder, permanently removing all messages marked for deletion.</para>
-		/// <para>Note: Normally, an <see cref="MessageExpunged"/> event will be emitted for each
+		/// <note type="note">Normally, an <see cref="MessageExpunged"/> event will be emitted for each
 		/// message that is expunged. However, if the mail store supports the quick
 		/// resynchronization feature and it has been enabled via the
 		/// <see cref="IMailStore.EnableQuickResync(CancellationToken)"/> method, then
 		/// the <see cref="MessagesVanished"/> event will be emitted rather than the
-		/// <see cref="MessageExpunged"/> event.</para>
+		/// <see cref="MessageExpunged"/> event.</note>
 		/// </remarks>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		void Expunge (CancellationToken cancellationToken = default (CancellationToken));
@@ -748,12 +895,12 @@ namespace MailKit {
 		/// </summary>
 		/// <remarks>
 		/// <para>Asynchronously expunges the folder, permanently removing all messages marked for deletion.</para>
-		/// <para>Note: Normally, an <see cref="MessageExpunged"/> event will be emitted for each
-		/// message that is expunged. However, if the mail store supports the quick
+		/// <note type="note">Normally, an <see cref="MessageExpunged"/> event will be emitted for
+		/// each message that is expunged. However, if the mail store supports the quick
 		/// resynchronization feature and it has been enabled via the
 		/// <see cref="IMailStore.EnableQuickResync(CancellationToken)"/> method, then
 		/// the <see cref="MessagesVanished"/> event will be emitted rather than the
-		/// <see cref="MessageExpunged"/> event.</para>
+		/// <see cref="MessageExpunged"/> event.</note>
 		/// </remarks>
 		/// <returns>An asynchronous task context.</returns>
 		/// <param name="cancellationToken">The cancellation token.</param>
@@ -764,12 +911,12 @@ namespace MailKit {
 		/// </summary>
 		/// <remarks>
 		/// <para>Expunges the specified uids, permanently removing them from the folder.</para>
-		/// <para>Note: Normally, an <see cref="MessageExpunged"/> event will be emitted for each
-		/// message that is expunged. However, if the mail store supports the quick
+		/// <note type="note">Normally, an <see cref="MessageExpunged"/> event will be emitted for
+		/// each message that is expunged. However, if the mail store supports the quick
 		/// resynchronization feature and it has been enabled via the
 		/// <see cref="IMailStore.EnableQuickResync(CancellationToken)"/> method, then
 		/// the <see cref="MessagesVanished"/> event will be emitted rather than the
-		/// <see cref="MessageExpunged"/> event.</para>
+		/// <see cref="MessageExpunged"/> event.</note>
 		/// </remarks>
 		/// <param name="uids">The message uids.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
@@ -780,12 +927,12 @@ namespace MailKit {
 		/// </summary>
 		/// <remarks>
 		/// <para>Asynchronously expunges the specified uids, permanently removing them from the folder.</para>
-		/// <para>Note: Normally, an <see cref="MessageExpunged"/> event will be emitted for each
-		/// message that is expunged. However, if the mail store supports the quick
+		/// <note type="note">Normally, an <see cref="MessageExpunged"/> event will be emitted for
+		/// each message that is expunged. However, if the mail store supports the quick
 		/// resynchronization feature and it has been enabled via the
 		/// <see cref="IMailStore.EnableQuickResync(CancellationToken)"/> method, then
 		/// the <see cref="MessagesVanished"/> event will be emitted rather than the
-		/// <see cref="MessageExpunged"/> event.</para>
+		/// <see cref="MessageExpunged"/> event.</note>
 		/// </remarks>
 		/// <returns>An asynchronous task context.</returns>
 		/// <param name="uids">The message uids.</param>
@@ -1046,11 +1193,11 @@ namespace MailKit {
 		/// <remarks>
 		/// Copies the specified messages to the destination folder.
 		/// </remarks>
-		/// <returns>The UIDs of the messages in the destination folder, if available; otherwise an empty array.</returns>
+		/// <returns>The UID mapping of the messages in the destination folder, if available; otherwise an empty mapping.</returns>
 		/// <param name="uids">The UIDs of the messages to copy.</param>
 		/// <param name="destination">The destination folder.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
-		IList<UniqueId> CopyTo (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
+		UniqueIdMap CopyTo (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Asynchronously copy the specified messages to the destination folder.
@@ -1058,11 +1205,11 @@ namespace MailKit {
 		/// <remarks>
 		/// Asynchronously copies the specified messages to the destination folder.
 		/// </remarks>
-		/// <returns>The UIDs of the messages in the destination folder, if available; otherwise an empty array.</returns>
+		/// <returns>The UID mapping of the messages in the destination folder, if available; otherwise an empty mapping.</returns>
 		/// <param name="uids">The UIDs of the messages to copy.</param>
 		/// <param name="destination">The destination folder.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
-		Task<IList<UniqueId>> CopyToAsync (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
+		Task<UniqueIdMap> CopyToAsync (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Move the specified message to the destination folder.
@@ -1094,11 +1241,11 @@ namespace MailKit {
 		/// <remarks>
 		/// Moves the specified messages to the destination folder.
 		/// </remarks>
-		/// <returns>The UIDs of the messages in the destination folder, if available; otherwise an empty array.</returns>
+		/// <returns>The UID mapping of the messages in the destination folder, if available; otherwise an empty mapping.</returns>
 		/// <param name="uids">The UIDs of the messages to copy.</param>
 		/// <param name="destination">The destination folder.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
-		IList<UniqueId> MoveTo (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
+		UniqueIdMap MoveTo (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Asynchronously move the specified messages to the destination folder.
@@ -1106,11 +1253,11 @@ namespace MailKit {
 		/// <remarks>
 		/// Asynchronously moves the specified messages to the destination folder.
 		/// </remarks>
-		/// <returns>The UIDs of the messages in the destination folder, if available; otherwise an empty array.</returns>
+		/// <returns>The UID mapping of the messages in the destination folder, if available; otherwise an empty mapping.</returns>
 		/// <param name="uids">The UIDs of the messages to copy.</param>
 		/// <param name="destination">The destination folder.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
-		Task<IList<UniqueId>> MoveToAsync (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
+		Task<UniqueIdMap> MoveToAsync (IList<UniqueId> uids, IMailFolder destination, CancellationToken cancellationToken = default (CancellationToken));
 
 		/// <summary>
 		/// Copy the specified message to the destination folder.
@@ -4238,11 +4385,11 @@ namespace MailKit {
 		/// inefficient. To alleviate this potential problem, this event will be emitted
 		/// as soon as the <see cref="IMailFolder"/> successfully retrieves the complete
 		/// <see cref="IMessageSummary"/> for each requested message.</para>
-		/// <para>Note: The Fetch methods will return a list of all message summaries
-		/// that any information was retrieved for, regardless of whether or not all of
-		/// the requested items were fetched, therefore there may be a discrepency between
-		/// the number of times this event is emitetd and the number of summary items
-		/// returned from the Fetch method.</para>
+		/// <note type="note">The <a href="Overload_MailKit_IMailFolder_Fetch.htm">Fetch</a>
+		/// methods will return a list of all message summaries that any information was
+		/// retrieved for, regardless of whether or not all of the requested items were fetched,
+		/// therefore there may be a discrepency between the number of times this event is
+		/// emitetd and the number of summary items returned from the Fetch method.</note>
 		/// </remarks>
 		event EventHandler<MessageSummaryFetchedEventArgs> MessageSummaryFetched;
 

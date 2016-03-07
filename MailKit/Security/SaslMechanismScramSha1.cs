@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -124,7 +124,7 @@ namespace MailKit.Security {
 
 			return hash;
 #else
-			using (var sha1 = new SHA1CryptoServiceProvider ())
+			using (var sha1 = SHA1.Create ())
 				return sha1.ComputeHash (str);
 #endif
 		}

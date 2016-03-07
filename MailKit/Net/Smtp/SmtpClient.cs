@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +34,7 @@ using System.Collections.Generic;
 
 using MimeKit;
 using MimeKit.IO;
+using System.Threading.Tasks;
 
 #if NETFX_CORE
 using Windows.Networking;
@@ -84,6 +85,7 @@ namespace MailKit.Net.Smtp {
 		bool authenticated;
 		bool connected;
 		bool disposed;
+		bool secure;
 		string host;
 
 		/// <summary>
@@ -202,8 +204,8 @@ namespace MailKit.Net.Smtp {
 		/// <remarks>
 		/// <para>The maximum message size will not be known until a successful connection has
 		/// been made and may change once the client is authenticated.</para>
-		/// <para>Note: This value is only relevant if the <see cref="Capabilities"/>
-		/// includes the <see cref="SmtpCapabilities.Size"/> flag.</para>
+		/// <note type="note">This value is only relevant if the <see cref="Capabilities"/> includes
+		/// the <see cref="SmtpCapabilities.Size"/> flag.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\SmtpExamples.cs" region="Capabilities"/>
@@ -225,11 +227,11 @@ namespace MailKit.Net.Smtp {
 		/// Get the authentication mechanisms supported by the SMTP server.
 		/// </summary>
 		/// <remarks>
-		/// <para>The authentication mechanisms are queried as part of the connection process.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms in the
-		/// <a href="Overload_MailKit_Net_Smtp_SmtpClient_Authenticate.htm">Authenticate</a>
-		/// methods, simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling Authenticate().</para>
+		/// <para>The authentication mechanisms are queried as part of the connection
+		/// process.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before authenticating.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\SmtpExamples.cs" region="Capabilities"/>
@@ -275,6 +277,17 @@ namespace MailKit.Net.Smtp {
 		}
 
 		/// <summary>
+		/// Get whether or not the connection is secure (typically via SSL or TLS).
+		/// </summary>
+		/// <remarks>
+		/// Gets whether or not the connection is secure (typically via SSL or TLS).
+		/// </remarks>
+		/// <value><c>true</c> if the connection is secure; otherwise, <c>false</c>.</value>
+		public override bool IsSecure {
+			get { return IsConnected && secure; }
+		}
+
+		/// <summary>
 		/// Get whether or not the client is currently authenticated with the SMTP server.
 		/// </summary>
 		/// <remarks>
@@ -289,15 +302,17 @@ namespace MailKit.Net.Smtp {
 		}
 
 #if !NETFX_CORE
-		bool ValidateRemoteCertificate (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors errors)
+		bool ValidateRemoteCertificate (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
 		{
 			if (ServerCertificateValidationCallback != null)
-				return ServerCertificateValidationCallback (host, certificate, chain, errors);
+				return ServerCertificateValidationCallback (host, certificate, chain, sslPolicyErrors);
 
+#if !COREFX
 			if (ServicePointManager.ServerCertificateValidationCallback != null)
-				return ServicePointManager.ServerCertificateValidationCallback (host, certificate, chain, errors);
+				return ServicePointManager.ServerCertificateValidationCallback (host, certificate, chain, sslPolicyErrors);
+#endif
 
-			return true;
+			return DefaultServerCertificateValidationCallback (sender, certificate, chain, sslPolicyErrors);
 		}
 #endif
 
@@ -488,14 +503,17 @@ namespace MailKit.Net.Smtp {
 		/// The <see cref="Capabilities"/> property can be checked for the
 		/// <see cref="SmtpCapabilities.Authentication"/> flag to make sure the
 		/// SMTP server supports authentication before calling this method.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling this method.</para>
+		/// <note type="tip"> To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
 		/// </remarks>
+		/// <param name="encoding">The text encoding to use for the user's credentials.</param>
 		/// <param name="credentials">The user's credentials.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		/// <exception cref="System.ArgumentNullException">
-		/// <paramref name="credentials"/> is <c>null</c>.
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
 		/// </exception>
 		/// <exception cref="ServiceNotConnectedException">
 		/// The <see cref="SmtpClient"/> is not connected.
@@ -524,8 +542,11 @@ namespace MailKit.Net.Smtp {
 		/// <exception cref="SmtpProtocolException">
 		/// An SMTP protocol error occurred.
 		/// </exception>
-		public override void Authenticate (ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
+		public override void Authenticate (Encoding encoding, ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
 		{
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
 			if (credentials == null)
 				throw new ArgumentNullException ("credentials");
 
@@ -552,7 +573,7 @@ namespace MailKit.Net.Smtp {
 				if (!AuthenticationMechanisms.Contains (authmech))
 					continue;
 
-				if ((sasl = SaslMechanism.Create (authmech, uri, credentials)) == null)
+				if ((sasl = SaslMechanism.Create (authmech, uri, encoding, credentials)) == null)
 					continue;
 
 				tried = true;
@@ -591,7 +612,9 @@ namespace MailKit.Net.Smtp {
 					// an EHLO command after authenticating even though the specifications explicitly
 					// state that clients SHOULD send EHLO again after authenticating.
 					// See https://github.com/jstedfast/MailKit/issues/162 for details.
-					if (host != "smtp.strato.de")
+					//
+					// Apparently smtp.sina.com has the same problem. Don't you love non RFC-compliant mail servers?
+					if (host != "smtp.strato.de" && host != "smtp.sina.com")
 						Ehlo (cancellationToken);
 					authenticated = true;
 					OnAuthenticated (response.Response);
@@ -619,6 +642,7 @@ namespace MailKit.Net.Smtp {
 			capabilities = SmtpCapabilities.None;
 			AuthenticationMechanisms.Clear ();
 			host = hostName;
+			secure = false;
 			MaxSize = 0;
 
 			try {
@@ -699,13 +723,13 @@ namespace MailKit.Net.Smtp {
 		/// <para>Once a connection is established, properties such as
 		/// <see cref="AuthenticationMechanisms"/> and <see cref="Capabilities"/> will be
 		/// populated.</para>
-		/// <para>Note: The connection established by any of the
+		/// <note type="note">The connection established by any of the
 		/// <a href="Overload_MailKit_Net_Smtp_SmtpClient_Connect.htm">Connect</a>
 		/// methods may be re-used if an application wishes to send multiple messages
 		/// to the same SMTP server. Since connecting and authenticating can be expensive
 		/// operations, re-using a connection can significantly improve performance when
 		/// sending a large number of messages to the same SMTP server over a short
-		/// period of time.</para>
+		/// period of time.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\SmtpExamples.cs" region="SendMessage"/>
@@ -774,7 +798,11 @@ namespace MailKit.Net.Smtp {
 			ComputeDefaultValues (host, ref port, ref options, out uri, out starttls);
 
 #if !NETFX_CORE
-			var ipAddresses = Dns.GetHostAddresses (host);
+#if COREFX
+			var ipAddresses = Dns.GetHostAddressesAsync (uri.DnsSafeHost).GetAwaiter ().GetResult ();
+#else
+			var ipAddresses = Dns.GetHostAddresses (uri.DnsSafeHost);
+#endif
 			Socket socket = null;
 
 			for (int i = 0; i < ipAddresses.Length; i++) {
@@ -809,9 +837,11 @@ namespace MailKit.Net.Smtp {
 			if (options == SecureSocketOptions.SslOnConnect) {
 				var ssl = new SslStream (new NetworkStream (socket, true), false, ValidateRemoteCertificate);
 				ssl.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
+				secure = true;
 				stream = ssl;
 			} else {
 				stream = new NetworkStream (socket, true);
+				secure = false;
 			}
 #else
 			var protection = options == SecureSocketOptions.SslOnConnect ? SocketProtectionLevel.Tls12 : SocketProtectionLevel.PlainSocket;
@@ -869,6 +899,8 @@ namespace MailKit.Net.Smtp {
 						.GetResult ();
 #endif
 
+					secure = true;
+
 					// Send EHLO again and get the new list of supported extensions
 					Ehlo (cancellationToken);
 				}
@@ -876,6 +908,7 @@ namespace MailKit.Net.Smtp {
 				connected = true;
 			} catch {
 				Stream.Dispose ();
+				secure = false;
 				Stream = null;
 				throw;
 			}
@@ -902,13 +935,13 @@ namespace MailKit.Net.Smtp {
 		/// <para>Once a connection is established, properties such as
 		/// <see cref="AuthenticationMechanisms"/> and <see cref="Capabilities"/> will be
 		/// populated.</para>
-		/// <para>Note: The connection established by any of the
+		/// <note type="note">The connection established by any of the
 		/// <a href="Overload_MailKit_Net_Smtp_SmtpClient_Connect.htm">Connect</a>
 		/// methods may be re-used if an application wishes to send multiple messages
 		/// to the same SMTP server. Since connecting and authenticating can be expensive
 		/// operations, re-using a connection can significantly improve performance when
 		/// sending a large number of messages to the same SMTP server over a short
-		/// period of time.</para>
+		/// period of time./</note>
 		/// </remarks>
 		/// <param name="socket">The socket to use for the connection.</param>
 		/// <param name="host">The host name to connect to.</param>
@@ -989,9 +1022,11 @@ namespace MailKit.Net.Smtp {
 			if (options == SecureSocketOptions.SslOnConnect) {
 				var ssl = new SslStream (new NetworkStream (socket, true), false, ValidateRemoteCertificate);
 				ssl.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
+				secure = true;
 				stream = ssl;
 			} else {
 				stream = new NetworkStream (socket, true);
+				secure = false;
 			}
 
 			if (stream.CanTimeout) {
@@ -1025,6 +1060,8 @@ namespace MailKit.Net.Smtp {
 					tls.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
 					Stream.Stream = tls;
 
+					secure = true;
+
 					// Send EHLO again and get the new list of supported extensions
 					Ehlo (cancellationToken);
 				}
@@ -1032,6 +1069,7 @@ namespace MailKit.Net.Smtp {
 				connected = true;
 			} catch {
 				Stream.Dispose ();
+				secure = false;
 				Stream = null;
 				throw;
 			}
@@ -1114,6 +1152,7 @@ namespace MailKit.Net.Smtp {
 		{
 			authenticated = false;
 			connected = false;
+			secure = false;
 			host = null;
 
 			if (Stream != null) {
@@ -1182,7 +1221,7 @@ namespace MailKit.Net.Smtp {
 
 			protected override void VisitMultipart (Multipart multipart)
 			{
-				if (multipart.ContentType.Matches ("multipart", "signed")) {
+				if (multipart.ContentType.IsMimeType ("multipart", "signed")) {
 					// do not modify children of a multipart/signed
 					return;
 				}
@@ -1271,7 +1310,20 @@ namespace MailKit.Net.Smtp {
 			ProcessMailFromResponse (SendCommand (command, cancellationToken), mailbox);
 		}
 
-		static void ProcessRcptToResponse (SmtpResponse response, MailboxAddress mailbox)
+		/// <summary>
+		/// Process the response to a RCPT TO command.
+		/// </summary>
+		/// <remarks>
+		/// <para>Processes the response to a RCPT TO command.</para>
+		/// <para>By default, this method no-op when the <paramref name="response"/>
+		/// <see cref="SmtpResponse.StatusCode"/> property has a value of
+		/// <see cref="SmtpStatusCode.Ok"/> or
+		/// <see cref="SmtpStatusCode.UserNotLocalWillForward"/> and will throw
+		/// an appropriate exception for all other status codes.</para>
+		/// </remarks>
+		/// <param name="response">The response to an RCPT TO command.</param>
+		/// <param name="mailbox">The mailbox used in the RCPT TO command.</param>
+		protected virtual void ProcessRcptToResponse (SmtpResponse response, MailboxAddress mailbox)
 		{
 			switch (response.StatusCode) {
 			case SmtpStatusCode.UserNotLocalWillForward:
@@ -1585,6 +1637,9 @@ namespace MailKit.Net.Smtp {
 		/// </exception>
 		public override void Send (FormatOptions options, MimeMessage message, CancellationToken cancellationToken = default (CancellationToken), ITransferProgress progress = null)
 		{
+			if (options == null)
+				throw new ArgumentNullException ("options");
+
 			if (message == null)
 				throw new ArgumentNullException ("message");
 
@@ -1673,6 +1728,246 @@ namespace MailKit.Net.Smtp {
 		}
 
 		#endregion
+
+		/// <summary>
+		/// Expand a mailing address alias.
+		/// </summary>
+		/// <remarks>
+		/// Expands a mailing address alias.
+		/// </remarks>
+		/// <returns>The expanded list of mailbox addresses.</returns>
+		/// <param name="alias">The mailing address alias.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <paramref name="alias"/> is <c>null</c>.
+		/// </exception>
+		/// <exception cref="System.ArgumentException">
+		/// <paramref name="alias"/> is an empty string.
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="SmtpClient"/> has been disposed.
+		/// </exception>
+		/// <exception cref="ServiceNotConnectedException">
+		/// The <see cref="SmtpClient"/> is not connected.
+		/// </exception>
+		/// <exception cref="ServiceNotAuthenticatedException">
+		/// Authentication is required before verifying the existence of an address.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation has been canceled.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="SmtpCommandException">
+		/// The SMTP command failed.
+		/// </exception>
+		/// <exception cref="SmtpProtocolException">
+		/// An SMTP protocol exception occurred.
+		/// </exception>
+		public InternetAddressList Expand (string alias, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			if (alias == null)
+				throw new ArgumentNullException ("alias");
+
+			if (alias.Length == 0)
+				throw new ArgumentException ("The alias cannot be empty.", "alias");
+
+			if (alias.IndexOfAny (new [] { '\r', '\n' }) != -1)
+				throw new ArgumentException ("The alias cannot contain newline characters.", "alias");
+
+			CheckDisposed ();
+
+			if (!IsConnected)
+				throw new ServiceNotConnectedException ("The SmtpClient is not connected.");
+
+			var response = SendCommand (string.Format ("EXPN {0}", alias), cancellationToken);
+
+			if (response.StatusCode != SmtpStatusCode.Ok)
+				throw new SmtpCommandException (SmtpErrorCode.UnexpectedStatusCode, response.StatusCode, response.Response);
+
+			var lines = response.Response.Split ('\n');
+			var list = new InternetAddressList ();
+
+			for (int i = 0; i < lines.Length; i++) {
+				InternetAddress address;
+
+				if (InternetAddress.TryParse (lines[i], out address))
+					list.Add (address);
+			}
+
+			return list;
+		}
+
+		/// <summary>
+		/// Asynchronously expand a mailing address alias.
+		/// </summary>
+		/// <remarks>
+		/// Asynchronously expands a mailing address alias.
+		/// </remarks>
+		/// <returns>The expanded list of mailbox addresses.</returns>
+		/// <param name="alias">The mailing address alias.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <paramref name="alias"/> is <c>null</c>.
+		/// </exception>
+		/// <exception cref="System.ArgumentException">
+		/// <paramref name="alias"/> is an empty string.
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="SmtpClient"/> has been disposed.
+		/// </exception>
+		/// <exception cref="ServiceNotConnectedException">
+		/// The <see cref="SmtpClient"/> is not connected.
+		/// </exception>
+		/// <exception cref="ServiceNotAuthenticatedException">
+		/// Authentication is required before verifying the existence of an address.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation has been canceled.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="SmtpCommandException">
+		/// The SMTP command failed.
+		/// </exception>
+		/// <exception cref="SmtpProtocolException">
+		/// An SMTP protocol exception occurred.
+		/// </exception>
+		public Task<InternetAddressList> ExpandAsync (string alias, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			if (alias == null)
+				throw new ArgumentNullException ("alias");
+
+			if (alias.Length == 0)
+				throw new ArgumentException ("The alias cannot be empty.", "alias");
+
+			if (alias.IndexOfAny (new [] { '\r', '\n' }) != -1)
+				throw new ArgumentException ("The alias cannot contain newline characters.", "alias");
+
+			return Task.Factory.StartNew (() => {
+				lock (SyncRoot) {
+					return Expand (alias, cancellationToken);
+				}
+			}, cancellationToken, TaskCreationOptions.None, TaskScheduler.Default);
+		}
+
+		/// <summary>
+		/// Verify the existence of a mailbox address.
+		/// </summary>
+		/// <remarks>
+		/// Verifies the existence a mailbox address with the SMTP server, returning the expanded
+		/// mailbox address if it exists.
+		/// </remarks>
+		/// <returns>The expanded mailbox address.</returns>
+		/// <param name="address">The mailbox address.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <paramref name="address"/> is <c>null</c>.
+		/// </exception>
+		/// <exception cref="System.ArgumentException">
+		/// <paramref name="address"/> is an empty string.
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="SmtpClient"/> has been disposed.
+		/// </exception>
+		/// <exception cref="ServiceNotConnectedException">
+		/// The <see cref="SmtpClient"/> is not connected.
+		/// </exception>
+		/// <exception cref="ServiceNotAuthenticatedException">
+		/// Authentication is required before verifying the existence of an address.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation has been canceled.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="SmtpCommandException">
+		/// The SMTP command failed.
+		/// </exception>
+		/// <exception cref="SmtpProtocolException">
+		/// An SMTP protocol exception occurred.
+		/// </exception>
+		public MailboxAddress Verify (string address, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			if (address == null)
+				throw new ArgumentNullException ("address");
+
+			if (address.Length == 0)
+				throw new ArgumentException ("The address cannot be empty.", "address");
+
+			if (address.IndexOfAny (new [] { '\r', '\n' }) != -1)
+				throw new ArgumentException ("The address cannot contain newline characters.", "address");
+
+			CheckDisposed ();
+
+			if (!IsConnected)
+				throw new ServiceNotConnectedException ("The SmtpClient is not connected.");
+
+			var response = SendCommand (string.Format ("VRFY {0}", address), cancellationToken);
+
+			if (response.StatusCode == SmtpStatusCode.Ok)
+				return MailboxAddress.Parse (response.Response);
+
+			throw new SmtpCommandException (SmtpErrorCode.UnexpectedStatusCode, response.StatusCode, response.Response);
+		}
+
+		/// <summary>
+		/// Asynchronously verify the existence of a mailbox address.
+		/// </summary>
+		/// <remarks>
+		/// Asynchronously verifies the existence a mailbox address with the SMTP server,
+		/// returning the expanded mailbox address if it exists.
+		/// </remarks>
+		/// <returns>The expanded mailbox address.</returns>
+		/// <param name="address">The mailbox address.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <paramref name="address"/> is <c>null</c>.
+		/// </exception>
+		/// <exception cref="System.ArgumentException">
+		/// <paramref name="address"/> is an empty string.
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="SmtpClient"/> has been disposed.
+		/// </exception>
+		/// <exception cref="ServiceNotConnectedException">
+		/// The <see cref="SmtpClient"/> is not connected.
+		/// </exception>
+		/// <exception cref="ServiceNotAuthenticatedException">
+		/// Authentication is required before verifying the existence of an address.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation has been canceled.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="SmtpCommandException">
+		/// The SMTP command failed.
+		/// </exception>
+		/// <exception cref="SmtpProtocolException">
+		/// An SMTP protocol exception occurred.
+		/// </exception>
+		public Task<MailboxAddress> VerifyAsync (string address, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			if (address == null)
+				throw new ArgumentNullException ("address");
+
+			if (address.Length == 0)
+				throw new ArgumentException ("The address cannot be empty.", "address");
+
+			if (address.IndexOfAny (new [] { '\r', '\n' }) != -1)
+				throw new ArgumentException ("The address cannot contain newline characters.", "address");
+
+			return Task.Factory.StartNew (() => {
+				lock (SyncRoot) {
+					return Verify (address, cancellationToken);
+				}
+			}, cancellationToken, TaskCreationOptions.None, TaskScheduler.Default);
+		}
 
 		/// <summary>
 		/// Releases the unmanaged resources used by the <see cref="SmtpClient"/> and

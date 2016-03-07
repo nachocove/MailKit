@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,6 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
-using System.IO.Compression;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
@@ -45,7 +44,6 @@ using System.Security.Cryptography.X509Certificates;
 #endif
 
 using MailKit.Security;
-using MimeKit.Utils;
 
 namespace MailKit.Net.Imap {
 	/// <summary>
@@ -73,6 +71,7 @@ namespace MailKit.Net.Imap {
 		string identifier = null;
 		int timeout = 100000;
 		bool disposed;
+		bool secure;
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MailKit.Net.Imap.ImapClient"/> class.
@@ -218,7 +217,7 @@ namespace MailKit.Net.Imap {
 		/// </summary>
 		/// <remarks>
 		/// <para>Creates a new <see cref="ImapFolder"/> instance.</para>
-		/// <para>Note: This method's purpose is to allow subclassing <see cref="ImapFolder"/>.</para>
+		/// <note type="note">This method's purpose is to allow subclassing <see cref="ImapFolder"/>.</note>
 		/// </remarks>
 		/// <returns>The IMAP folder instance.</returns>
 		/// <param name="args">The constructior arguments.</param>
@@ -231,15 +230,17 @@ namespace MailKit.Net.Imap {
 		}
 
 #if !NETFX_CORE
-		bool ValidateRemoteCertificate (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors errors)
+		bool ValidateRemoteCertificate (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
 		{
 			if (ServerCertificateValidationCallback != null)
-				return ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, errors);
+				return ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, sslPolicyErrors);
 
+#if !COREFX
 			if (ServicePointManager.ServerCertificateValidationCallback != null)
-				return ServicePointManager.ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, errors);
+				return ServicePointManager.ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, sslPolicyErrors);
+#endif
 
-			return true;
+			return DefaultServerCertificateValidationCallback (sender, certificate, chain, sslPolicyErrors);
 		}
 #endif
 
@@ -282,18 +283,24 @@ namespace MailKit.Net.Imap {
 			if ((engine.Capabilities & ImapCapabilities.Compress) == 0)
 				throw new NotSupportedException ("The IMAP server does not support the COMPRESS extension.");
 
+			if (engine.State >= ImapEngineState.Selected)
+				throw new InvalidOperationException ("Compression must be enabled before selecting a folder.");
+
 			int capabilitiesVersion = engine.CapabilitiesVersion;
 			var ic = engine.QueueCommand (cancellationToken, null, "COMPRESS DEFLATE\r\n");
 
 			engine.Wait (ic);
 
-			if (ic.Response != ImapCommandResponse.Ok)
+			if (ic.Response != ImapCommandResponse.Ok) {
+				for (int i = 0; i < ic.RespCodes.Count; i++) {
+					if (ic.RespCodes[i].Type == ImapResponseCodeType.CompressionActive)
+						return;
+				}
+
 				throw ImapCommandException.Create ("COMPRESS", ic);
+			}
 
-			var unzip = new DeflateStream (engine.Stream.Stream, CompressionMode.Decompress);
-			var zip = new DeflateStream (engine.Stream.Stream, CompressionMode.Compress);
-
-			engine.Stream.Stream = new DuplexStream (unzip, zip);
+			engine.Stream.Stream = new CompressedStream (engine.Stream.Stream);
 
 			// Query the CAPABILITIES again if the server did not include an
 			// untagged CAPABILITIES response to the COMPRESS command.
@@ -352,7 +359,7 @@ namespace MailKit.Net.Imap {
 		/// <para>Enables the QRESYNC feature.</para>
 		/// <para>The QRESYNC extension improves resynchronization performance of folders by
 		/// querying the IMAP server for a list of changes when the folder is opened using the
-		/// <see cref="ImapFolder.Open(FolderAccess,UniqueId,ulong,System.Collections.Generic.IList&lt;UniqueId&gt;,System.Threading.CancellationToken)"/>
+		/// <see cref="ImapFolder.Open(FolderAccess,uint,ulong,System.Collections.Generic.IList&lt;UniqueId&gt;,System.Threading.CancellationToken)"/>
 		/// method.</para>
 		/// <para>If this feature is enabled, the <see cref="MailFolder.MessageExpunged"/> event is replaced
 		/// with the <see cref="MailFolder.MessagesVanished"/> event.</para>
@@ -522,8 +529,9 @@ namespace MailKit.Net.Imap {
 		/// <remarks>
 		/// <para>Passes along the client implementation details to the server while also obtaining implementation
 		/// details from the server.</para>
-		/// <para>If the <paramref name="clientImplementation"/> is null or no properties have been set, no
+		/// <para>If the <paramref name="clientImplementation"/> is <c>null</c> or no properties have been set, no
 		/// identifying information will be sent to the server.</para>
+		/// <note type="security">
 		/// <para>Security Implications</para>
 		/// <para>This command has the danger of violating the privacy of users if misused. Clients should
 		/// notify users that they send the ID command.</para>
@@ -534,11 +542,12 @@ namespace MailKit.Net.Imap {
 		/// Some properties, such as a processor ID number, Ethernet address, or other unique (or mostly unique) identifier
 		/// would allow tracking of users in ways that violate user privacy expectations and may also make it easier for
 		/// attackers to exploit security holes in the client.</para>
+		/// </note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\ImapExamples.cs" region="Capabilities"/>
 		/// </example>
-		/// <returns>The implementation details of the server.</returns>
+		/// <returns>The implementation details of the server if available; otherwise, <c>null</c>.</returns>
 		/// <param name="clientImplementation">The client implementation.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		/// <exception cref="System.ObjectDisposedException">
@@ -610,8 +619,9 @@ namespace MailKit.Net.Imap {
 		/// <remarks>
 		/// <para>Passes along the client implementation details to the server while also obtaining implementation
 		/// details from the server.</para>
-		/// <para>If the <paramref name="clientImplementation"/> is null or no properties have been set, no
+		/// <para>If the <paramref name="clientImplementation"/> is <c>null</c> or no properties have been set, no
 		/// identifying information will be sent to the server.</para>
+		/// <note type="security">
 		/// <para>Security Implications</para>
 		/// <para>This command has the danger of violating the privacy of users if misused. Clients should
 		/// notify users that they send the ID command.</para>
@@ -622,8 +632,9 @@ namespace MailKit.Net.Imap {
 		/// Some properties, such as a processor ID number, Ethernet address, or other unique (or mostly unique) identifier
 		/// would allow tracking of users in ways that violate user privacy expectations and may also make it easier for
 		/// attackers to exploit security holes in the client.</para>
+		/// </note>
 		/// </remarks>
-		/// <returns>The implementation details of the server.</returns>
+		/// <returns>The implementation details of the server if available; otherwise, <c>null</c>.</returns>
 		/// <param name="clientImplementation">The client implementation.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		/// <exception cref="System.ObjectDisposedException">
@@ -665,10 +676,9 @@ namespace MailKit.Net.Imap {
 		/// <para>The authentication mechanisms are queried as part of the
 		/// <a href="Overload_MailKit_Net_Imap_ImapClient_Connect.htm">Connect</a>
 		/// method.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms in
-		/// <a href="Overload_MailKit_Net_Imap_ImapClient_Authenticate.htm">Authenticate</a>,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash set
-		/// before authenticating.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before authenticating.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\ImapExamples.cs" region="Capabilities"/>
@@ -724,6 +734,17 @@ namespace MailKit.Net.Imap {
 		/// <value><c>true</c> if the client is connected; otherwise, <c>false</c>.</value>
 		public override bool IsConnected {
 			get { return engine.IsConnected; }
+		}
+
+		/// <summary>
+		/// Get whether or not the connection is secure (typically via SSL or TLS).
+		/// </summary>
+		/// <remarks>
+		/// Gets whether or not the connection is secure (typically via SSL or TLS).
+		/// </remarks>
+		/// <value><c>true</c> if the connection is secure; otherwise, <c>false</c>.</value>
+		public override bool IsSecure {
+			get { return IsConnected && secure; }
 		}
 
 		/// <summary>
@@ -877,14 +898,17 @@ namespace MailKit.Net.Imap {
 		/// the credentials are used to authenticate.</para>
 		/// <para>If the server does not support SASL or if no common SASL mechanisms
 		/// can be found, then LOGIN command is used as a fallback.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling the Authenticate() method.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
 		/// </remarks>
+		/// <param name="encoding">The text encoding to use for the user's credentials.</param>
 		/// <param name="credentials">The user's credentials.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		/// <exception cref="System.ArgumentNullException">
-		/// <paramref name="credentials"/> is <c>null</c>.
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
 		/// </exception>
 		/// <exception cref="System.ObjectDisposedException">
 		/// The <see cref="ImapClient"/> has been disposed.
@@ -910,8 +934,11 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="ImapProtocolException">
 		/// An IMAP protocol error occurred.
 		/// </exception>
-		public override void Authenticate (ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
+		public override void Authenticate (Encoding encoding, ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
 		{
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
 			if (credentials == null)
 				throw new ArgumentNullException ("credentials");
 
@@ -932,7 +959,7 @@ namespace MailKit.Net.Imap {
 				if (!engine.AuthenticationMechanisms.Contains (authmech))
 					continue;
 
-				if ((sasl = SaslMechanism.Create (authmech, uri, credentials)) == null)
+				if ((sasl = SaslMechanism.Create (authmech, uri, encoding, credentials)) == null)
 					continue;
 
 				cancellationToken.ThrowIfCancellationRequested ();
@@ -1036,6 +1063,7 @@ namespace MailKit.Net.Imap {
 			engine.Uri = new Uri ("imap://" + host);
 			engine.Connect (new ImapStream (replayStream, null, ProtocolLogger), cancellationToken);
 			engine.TagPrefix = 'A';
+			secure = false;
 
 			if (engine.CapabilitiesVersion == 0)
 				engine.QueryCapabilities (cancellationToken);
@@ -1162,7 +1190,11 @@ namespace MailKit.Net.Imap {
 			ComputeDefaultValues (host, ref port, ref options, out uri, out starttls);
 
 #if !NETFX_CORE
-			var ipAddresses = Dns.GetHostAddresses (host);
+#if COREFX
+			var ipAddresses = Dns.GetHostAddressesAsync (uri.DnsSafeHost).GetAwaiter ().GetResult ();
+#else
+			var ipAddresses = Dns.GetHostAddresses (uri.DnsSafeHost);
+#endif
 			Socket socket = null;
 
 			for (int i = 0; i < ipAddresses.Length; i++) {
@@ -1195,9 +1227,11 @@ namespace MailKit.Net.Imap {
 			if (options == SecureSocketOptions.SslOnConnect) {
 				var ssl = new SslStream (new NetworkStream (socket, true), false, ValidateRemoteCertificate);
 				ssl.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
+				secure = true;
 				stream = ssl;
 			} else {
 				stream = new NetworkStream (socket, true);
+				secure = false;
 			}
 #else
 			var protection = options == SecureSocketOptions.SslOnConnect ? SocketProtectionLevel.Tls12 : SocketProtectionLevel.PlainSocket;
@@ -1253,6 +1287,8 @@ namespace MailKit.Net.Imap {
 							.GetResult ();
 #endif
 
+						secure = true;
+
 						// Query the CAPABILITIES again if the server did not include an
 						// untagged CAPABILITIES response to the STARTTLS command.
 						if (engine.CapabilitiesVersion == 1)
@@ -1263,6 +1299,7 @@ namespace MailKit.Net.Imap {
 				}
 			} catch {
 				engine.Disconnect ();
+				secure = false;
 				throw;
 			}
 
@@ -1362,9 +1399,11 @@ namespace MailKit.Net.Imap {
 			if (options == SecureSocketOptions.SslOnConnect) {
 				var ssl = new SslStream (new NetworkStream (socket, true), false, ValidateRemoteCertificate);
 				ssl.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
+				secure = true;
 				stream = ssl;
 			} else {
 				stream = new NetworkStream (socket, true);
+				secure = false;
 			}
 
 			if (stream.CanTimeout) {
@@ -1394,6 +1433,8 @@ namespace MailKit.Net.Imap {
 						tls.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
 						engine.Stream.Stream = tls;
 
+						secure = true;
+
 						// Query the CAPABILITIES again if the server did not include an
 						// untagged CAPABILITIES response to the STARTTLS command.
 						if (engine.CapabilitiesVersion == 1)
@@ -1404,6 +1445,7 @@ namespace MailKit.Net.Imap {
 				}
 			} catch {
 				engine.Disconnect ();
+				secure = false;
 				throw;
 			}
 
@@ -1451,6 +1493,7 @@ namespace MailKit.Net.Imap {
 #endif
 
 			engine.Disconnect ();
+			secure = false;
 		}
 
 #if ENABLE_RECONNECT
@@ -1653,9 +1696,9 @@ namespace MailKit.Net.Imap {
 		/// or any of the other variants.</para>
 		/// <para>While the IDLE command is running, no other commands may be issued until the
 		/// <paramref name="doneToken"/> is cancelled.</para>
-		/// <para>Note: It is especially important to cancel the <paramref name="doneToken"/> before
-		/// cancelling the <paramref name="cancellationToken"/> when using SSL or TLS due to the
-		/// fact that <see cref="System.Net.Security.SslStream"/> cannot be polled.</para>
+		/// <note type="note">It is especially important to cancel the <paramref name="doneToken"/>
+		/// before cancelling the <paramref name="cancellationToken"/> when using SSL or TLS due to
+		/// the fact that <see cref="System.Net.Security.SslStream"/> cannot be polled.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\ImapIdleExample.cs"/>
@@ -1739,9 +1782,9 @@ namespace MailKit.Net.Imap {
 		/// or any of the other variants.</para>
 		/// <para>While the IDLE command is running, no other commands may be issued until the
 		/// <paramref name="doneToken"/> is cancelled.</para>
-		/// <para>Note: It is especially important to cancel the <paramref name="doneToken"/> before
-		/// cancelling the <paramref name="cancellationToken"/> when using SSL or TLS due to the
-		/// fact that <see cref="System.Net.Security.SslStream"/> cannot be polled.</para>
+		/// <note type="note">It is especially important to cancel the <paramref name="doneToken"/>
+		/// before cancelling the <paramref name="cancellationToken"/> when using SSL or TLS due to
+		/// the fact that <see cref="System.Net.Security.SslStream"/> cannot be polled.</note>
 		/// </remarks>
 		/// <returns>An asynchronous task context.</returns>
 		/// <param name="doneToken">The cancellation token used to return to the non-idle state.</param>
@@ -1851,7 +1894,7 @@ namespace MailKit.Net.Imap {
 		/// </summary>
 		/// <remarks>
 		/// <para>The Inbox folder is the default folder and always exists on the server.</para>
-		/// <para>Note: This property will only be available after the client has been authenticated.</para>
+		/// <note type="note">This property will only be available after the client has been authenticated.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\ImapExamples.cs" region="DownloadMessages"/>
@@ -1899,11 +1942,17 @@ namespace MailKit.Net.Imap {
 		/// <exception cref="ServiceNotAuthenticatedException">
 		/// The <see cref="ImapClient"/> is not authenticated.
 		/// </exception>
+		/// <exception cref="System.NotSupportedException">
+		/// The IMAP server does not support the SPECIAL-USE nor XLIST extensions.
+		/// </exception>
 		public override IMailFolder GetFolder (SpecialFolder folder)
 		{
 			CheckDisposed ();
 			CheckConnected ();
 			CheckAuthenticated ();
+
+			if ((Capabilities & (ImapCapabilities.SpecialUse | ImapCapabilities.XList)) == 0)
+				throw new NotSupportedException ("The IMAP server does not support the SPECIAL-USE nor XLIST extensions.");
 
 			switch (folder) {
 			case SpecialFolder.All:     return engine.All;
@@ -1966,6 +2015,7 @@ namespace MailKit.Net.Imap {
 		/// </remarks>
 		/// <returns>The folders.</returns>
 		/// <param name="namespace">The namespace.</param>
+		/// <param name="items">The status items to pre-populate.</param>
 		/// <param name="subscribedOnly">If set to <c>true</c>, only subscribed folders will be listed.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		/// <exception cref="System.ArgumentNullException">
@@ -1990,12 +2040,12 @@ namespace MailKit.Net.Imap {
 		/// An I/O error occurred.
 		/// </exception>
 		/// <exception cref="ImapCommandException">
-		/// The server replied to the IDLE command with a NO or BAD response.
+		/// The server replied to the LIST or LSUB command with a NO or BAD response.
 		/// </exception>
 		/// <exception cref="ImapProtocolException">
 		/// The server responded with an unexpected token.
 		/// </exception>
-		public override IEnumerable<IMailFolder> GetFolders (FolderNamespace @namespace, bool subscribedOnly = false, CancellationToken cancellationToken = default (CancellationToken))
+		public override IEnumerable<IMailFolder> GetFolders (FolderNamespace @namespace, StatusItems items = StatusItems.None, bool subscribedOnly = false, CancellationToken cancellationToken = default (CancellationToken))
 		{
 			if (@namespace == null)
 				throw new ArgumentNullException ("namespace");
@@ -2004,7 +2054,7 @@ namespace MailKit.Net.Imap {
 			CheckConnected ();
 			CheckAuthenticated ();
 
-			foreach (var folder in engine.GetFolders (@namespace, subscribedOnly, cancellationToken))
+			foreach (var folder in engine.GetFolders (@namespace, items, subscribedOnly, cancellationToken))
 				yield return folder;
 
 			yield break;
@@ -2069,6 +2119,7 @@ namespace MailKit.Net.Imap {
 		{
 			engine.Disconnected -= OnEngineDisconnected;
 			OnDisconnected ();
+			secure = false;
 		}
 
 		/// <summary>

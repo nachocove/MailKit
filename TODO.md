@@ -15,14 +15,11 @@
   * Extensions:
     * BINARY
     * CATENATE
-    * LIST-EXTENDED (Note: partially implemented already for getting the special folders)
+    * LIST-EXTENDED (Note: partially implemented already)
     * CONVERT (Note: none of the mainstream IMAP servers seem to support this)
     * ANNOTATE
-    * METADATA
     * NOTIFY (Note: only Dovecot seems to support this)
     * FILTERS (Note: none of the mainstream IMAP servers seem to support this)
-    * LIST-STATUS (Note: only Dovecot seems to support this)
-    * CREATE-SPECIAL-USE (Note: not widely supported)
     * MULTISEARCH (Note: none of the mainstream IMAP servers seem to support this)
 * Maildir
 * Thunderbird mbox folder trees

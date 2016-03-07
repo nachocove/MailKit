@@ -6,7 +6,7 @@
 //
 // Copyright (c) 2003 Motus Technologies Inc. (http://www.motus.com)
 // Copyright (c) 2004 Novell, Inc (http://www.novell.com)
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // References
 // a.	NTLM Authentication Scheme for HTTP, Ronald Tschalär
@@ -176,10 +176,9 @@ namespace MailKit.Security.Ntlm {
 
 		string DecodeString (byte[] buffer, int offset, int len)
 		{
-			if ((Flags & NtlmFlags.NegotiateUnicode) != 0)
-				return Encoding.Unicode.GetString (buffer, offset, len);
+			var encoding = (Flags & NtlmFlags.NegotiateUnicode) != 0 ? Encoding.Unicode : Encoding.UTF8;
 
-			return Encoding.ASCII.GetString (buffer, offset, len);
+			return encoding.GetString (buffer, offset, len);
 		}
 
 		byte[] EncodeString (string text)
@@ -187,10 +186,9 @@ namespace MailKit.Security.Ntlm {
 			if (text == null)
 				return new byte[0];
 
-			if ((Flags & NtlmFlags.NegotiateUnicode) != 0)
-				return Encoding.Unicode.GetBytes (text);
+			var encoding = (Flags & NtlmFlags.NegotiateUnicode) != 0 ? Encoding.Unicode : Encoding.UTF8;
 
-			return Encoding.ASCII.GetBytes (text);
+			return encoding.GetBytes (text);
 		}
 
 		public override byte[] Encode ()

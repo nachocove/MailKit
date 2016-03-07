@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -45,7 +45,6 @@ using System.Net.Sockets;
 using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using MD5 = System.Security.Cryptography.MD5CryptoServiceProvider;
 #endif
 
 using MimeKit;
@@ -83,8 +82,8 @@ namespace MailKit.Net.Pop3 {
 #if NETFX_CORE
 		StreamSocket socket;
 #endif
+		bool disposed, secure, utf8;
 		int timeout = 100000;
-		bool disposed, utf8;
 		int total;
 
 		/// <summary>
@@ -236,15 +235,17 @@ namespace MailKit.Net.Pop3 {
 		}
 
 #if !NETFX_CORE
-		bool ValidateRemoteCertificate (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors errors)
+		bool ValidateRemoteCertificate (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
 		{
 			if (ServerCertificateValidationCallback != null)
-				return ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, errors);
+				return ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, sslPolicyErrors);
 
+#if !COREFX
 			if (ServicePointManager.ServerCertificateValidationCallback != null)
-				return ServicePointManager.ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, errors);
+				return ServicePointManager.ServerCertificateValidationCallback (engine.Uri.Host, certificate, chain, sslPolicyErrors);
+#endif
 
-			return true;
+			return DefaultServerCertificateValidationCallback (sender, certificate, chain, sslPolicyErrors);
 		}
 #endif
 
@@ -271,7 +272,7 @@ namespace MailKit.Net.Pop3 {
 
 		void SendCommand (CancellationToken token, string command)
 		{
-			var pc = engine.QueueCommand (token, null, command);
+			var pc = engine.QueueCommand (token, null, Encoding.ASCII, command);
 
 			while (engine.Iterate () < pc.Id) {
 				// continue processing commands
@@ -283,12 +284,17 @@ namespace MailKit.Net.Pop3 {
 
 		string SendCommand (CancellationToken token, string format, params object[] args)
 		{
+			return SendCommand (token, Encoding.ASCII, format, args);
+		}
+
+		string SendCommand (CancellationToken token, Encoding encoding, string format, params object[] args)
+		{
 			string okText = string.Empty;
 
 			var pc = engine.QueueCommand (token, (pop3, cmd, text) => {
 				if (cmd.Status == Pop3CommandStatus.Ok)
 					okText = text;
-			}, format, args);
+			}, encoding, format, args);
 
 			while (engine.Iterate () < pc.Id) {
 				// continue processing commands
@@ -321,12 +327,11 @@ namespace MailKit.Net.Pop3 {
 		/// (<see cref="Pop3Capabilities.Apop"/>) or the ability to login using the
 		/// <c>USER</c> and <c>PASS</c> commands (<see cref="Pop3Capabilities.User"/>).
 		/// </para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms in the
-		/// <a href="Overload_MailKit_Net_Pop3_Pop3Client_Authenticate.htm">Authenticate</a>
-		/// methods, simply remove them from the the <see cref="AuthenticationMechanisms"/>
-		/// hash set before calling either of the Authenticate() methods.</para>
-		/// <para>In the case of the APOP authentication mechanism, remove it from
-		/// the <see cref="Capabilities"/> property instead.</para>
+		/// <note type="tip"><para>To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before authenticating.</para>
+		/// <para>In the case of the APOP authentication mechanism, remove it from the
+		/// <see cref="Capabilities"/> property instead.</para></note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\Pop3Examples.cs" region="Capabilities"/>
@@ -369,6 +374,17 @@ namespace MailKit.Net.Pop3 {
 		/// <value><c>true</c> if the client is connected; otherwise, <c>false</c>.</value>
 		public override bool IsConnected {
 			get { return engine.IsConnected; }
+		}
+
+		/// <summary>
+		/// Get whether or not the connection is secure (typically via SSL or TLS).
+		/// </summary>
+		/// <remarks>
+		/// Gets whether or not the connection is secure (typically via SSL or TLS).
+		/// </remarks>
+		/// <value><c>true</c> if the connection is secure; otherwise, <c>false</c>.</value>
+		public override bool IsSecure {
+			get { return IsConnected && secure; }
 		}
 
 		/// <summary>
@@ -443,14 +459,19 @@ namespace MailKit.Net.Pop3 {
 		/// <para>If the server does not support SASL or if no common SASL mechanisms
 		/// can be found, then the <c>USER</c> and <c>PASS</c> commands are used as a
 		/// fallback.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling any of the Authenticate() methods.</para>
+		/// <note type="tip"><para>To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</para>
+		/// <para>In the case of the APOP authentication mechanism, remove it from the
+		/// <see cref="Capabilities"/> property instead.</para></note>
 		/// </remarks>
+		/// <param name="encoding">The text encoding to use for the user's credentials.</param>
 		/// <param name="credentials">The user's credentials.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
 		/// <exception cref="System.ArgumentNullException">
-		/// <paramref name="credentials"/> is <c>null</c>.
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
 		/// </exception>
 		/// <exception cref="System.ObjectDisposedException">
 		/// The <see cref="Pop3Client"/> has been disposed.
@@ -479,8 +500,11 @@ namespace MailKit.Net.Pop3 {
 		/// <exception cref="Pop3ProtocolException">
 		/// An POP3 protocol error occurred.
 		/// </exception>
-		public override void Authenticate (ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
+		public override void Authenticate (Encoding encoding, ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
 		{
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
 			if (credentials == null)
 				throw new ArgumentNullException ("credentials");
 
@@ -507,14 +531,14 @@ namespace MailKit.Net.Pop3 {
 				var md5sum = new StringBuilder ();
 				byte[] digest;
 
-				using (var md5 = new MD5 ())
-					digest = md5.ComputeHash (Encoding.UTF8.GetBytes (challenge));
+				using (var md5 = MD5.Create ())
+					digest = md5.ComputeHash (encoding.GetBytes (challenge));
 
 				for (int i = 0; i < digest.Length; i++)
 					md5sum.Append (digest[i].ToString ("x2"));
 
 				try {
-					authMessage = SendCommand (cancellationToken, "APOP {0} {1}", userName, md5sum);
+					authMessage = SendCommand (cancellationToken, "APOP {0} {1}", encoding, userName, md5sum);
 					engine.State = Pop3EngineState.Transaction;
 				} catch (Pop3CommandException) {
 				}
@@ -591,8 +615,8 @@ namespace MailKit.Net.Pop3 {
 			password = utf8 ? SaslMechanism.SaslPrep (cred.Password) : cred.Password;
 
 			try {
-				SendCommand (cancellationToken, "USER {0}", userName);
-				authMessage = SendCommand (cancellationToken, "PASS {0}", password);
+				SendCommand (cancellationToken, encoding, "USER {0}", userName);
+				authMessage = SendCommand (cancellationToken, encoding, "PASS {0}", password);
 			} catch (Pop3CommandException) {
 				throw new AuthenticationException ();
 			}
@@ -615,6 +639,7 @@ namespace MailKit.Net.Pop3 {
 			CheckDisposed ();
 
 			probed = ProbedCapabilities.None;
+			secure = false;
 
 			engine.Uri = new Uri ("pop://" + host);
 			engine.Connect (new Pop3Stream (replayStream, null, ProtocolLogger), cancellationToken);
@@ -744,7 +769,11 @@ namespace MailKit.Net.Pop3 {
 			ComputeDefaultValues (host, ref port, ref options, out uri, out starttls);
 
 #if !NETFX_CORE
+#if COREFX
+			var ipAddresses = Dns.GetHostAddressesAsync (uri.DnsSafeHost).GetAwaiter ().GetResult ();
+#else
 			var ipAddresses = Dns.GetHostAddresses (uri.DnsSafeHost);
+#endif
 			Socket socket = null;
 
 			for (int i = 0; i < ipAddresses.Length; i++) {
@@ -777,9 +806,11 @@ namespace MailKit.Net.Pop3 {
 			if (options == SecureSocketOptions.SslOnConnect) {
 				var ssl = new SslStream (new NetworkStream (socket, true), false, ValidateRemoteCertificate);
 				ssl.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
+				secure = true;
 				stream = ssl;
 			} else {
 				stream = new NetworkStream (socket, true);
+				secure = false;
 			}
 #else
 			var protection = options == SecureSocketOptions.SslOnConnect ? SocketProtectionLevel.Tls12 : SocketProtectionLevel.PlainSocket;
@@ -830,11 +861,14 @@ namespace MailKit.Net.Pop3 {
 						.GetResult ();
 #endif
 
+					secure = true;
+
 					// re-issue a CAPA command
 					engine.QueryCapabilities (cancellationToken);
 				}
 			} catch {
 				engine.Disconnect ();
+				secure = false;
 				throw;
 			}
 
@@ -937,9 +971,11 @@ namespace MailKit.Net.Pop3 {
 			if (options == SecureSocketOptions.SslOnConnect) {
 				var ssl = new SslStream (new NetworkStream (socket, true), false, ValidateRemoteCertificate);
 				ssl.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
+				secure = true;
 				stream = ssl;
 			} else {
 				stream = new NetworkStream (socket, true);
+				secure = false;
 			}
 
 			probed = ProbedCapabilities.None;
@@ -965,11 +1001,14 @@ namespace MailKit.Net.Pop3 {
 					tls.AuthenticateAsClient (host, ClientCertificates, SslProtocols, true);
 					engine.Stream.Stream = tls;
 
+					secure = true;
+
 					// re-issue a CAPA command
 					engine.QueryCapabilities (cancellationToken);
 				}
 			} catch {
 				engine.Disconnect ();
+				secure = false;
 				throw;
 			}
 
@@ -1009,11 +1048,12 @@ namespace MailKit.Net.Pop3 {
 				}
 			}
 
-			#if NETFX_CORE
+#if NETFX_CORE
 			socket.Dispose ();
 			socket = null;
-			#endif
+#endif
 
+			secure = utf8 = false;
 			dict.Clear ();
 			total = 0;
 
@@ -1058,7 +1098,7 @@ namespace MailKit.Net.Pop3 {
 		void OnEngineDisconnected (object sender, EventArgs e)
 		{
 			engine.Disconnected -= OnEngineDisconnected;
-			utf8 = false;
+			secure = utf8 = false;
 
 			OnDisconnected ();
 		}
@@ -1475,9 +1515,9 @@ namespace MailKit.Net.Pop3 {
 		/// </summary>
 		/// <remarks>
 		/// <para>Gets the UID of the message at the specified index.</para>
-		/// <para>Note: Not all servers support UIDs, so you should first check the <see cref="Capabilities"/>
-		/// property for the <see cref="Pop3Capabilities.UIDL"/> flag or the <see cref="SupportsUids"/>
-		/// convenience property.</para>
+		/// <note type="warning">Not all servers support UIDs, so you should first check the
+		/// <see cref="Capabilities"/> property for the <see cref="Pop3Capabilities.UIDL"/> flag or
+		/// the <see cref="SupportsUids"/> convenience property.</note>
 		/// </remarks>
 		/// <returns>The message UID.</returns>
 		/// <param name="index">The message index.</param>
@@ -1577,8 +1617,9 @@ namespace MailKit.Net.Pop3 {
 		/// </summary>
 		/// <remarks>
 		/// <para>Gets the full list of available message UIDs.</para>
-		/// <para>Note: Not all servers support UIDs, so you should first check
-		/// the <see cref="SupportsUids"/> property.</para>
+		/// <note type="warning">Not all servers support UIDs, so you should first check the
+		/// <see cref="Capabilities"/> property for the <see cref="Pop3Capabilities.UIDL"/> flag or
+		/// the <see cref="SupportsUids"/> convenience property.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\Pop3Examples.cs" region="DownloadNewMessages"/>
@@ -2862,7 +2903,7 @@ namespace MailKit.Net.Pop3 {
 		/// <exception cref="Pop3ProtocolException">
 		/// A POP3 protocol error occurred.
 		/// </exception>
-		public override Stream GetStream (int index, bool headersOnly, CancellationToken cancellationToken = default (CancellationToken), ITransferProgress progress = null)
+		public override Stream GetStream (int index, bool headersOnly = false, CancellationToken cancellationToken = default (CancellationToken), ITransferProgress progress = null)
 		{
 			CheckDisposed ();
 			CheckConnected ();
@@ -2923,17 +2964,17 @@ namespace MailKit.Net.Pop3 {
 		/// <exception cref="Pop3ProtocolException">
 		/// A POP3 protocol error occurred.
 		/// </exception>
-		public override IList<Stream> GetStreams (IList<int> indexes, bool headersOnly, CancellationToken cancellationToken = default (CancellationToken), ITransferProgress progress = null)
+		public override IList<Stream> GetStreams (IList<int> indexes, bool headersOnly = false, CancellationToken cancellationToken = default (CancellationToken), ITransferProgress progress = null)
 		{
+			CheckDisposed ();
+			CheckConnected ();
+			CheckAuthenticated ();
+
 			if (indexes == null)
 				throw new ArgumentNullException ("indexes");
 
 			if (indexes.Count == 0)
 				throw new ArgumentException ("No indexes specified.", "indexes");
-
-			CheckDisposed ();
-			CheckConnected ();
-			CheckAuthenticated ();
 
 			var seqids = new int[indexes.Count];
 
@@ -2993,17 +3034,17 @@ namespace MailKit.Net.Pop3 {
 		/// <exception cref="Pop3ProtocolException">
 		/// A POP3 protocol error occurred.
 		/// </exception>
-		public override IList<Stream> GetStreams (int startIndex, int count, bool headersOnly, CancellationToken cancellationToken = default (CancellationToken), ITransferProgress progress = null)
+		public override IList<Stream> GetStreams (int startIndex, int count, bool headersOnly = false, CancellationToken cancellationToken = default (CancellationToken), ITransferProgress progress = null)
 		{
+			CheckDisposed ();
+			CheckConnected ();
+			CheckAuthenticated ();
+
 			if (startIndex < 0 || startIndex >= total)
 				throw new ArgumentOutOfRangeException ("startIndex");
 
 			if (count < 0 || count > (total - startIndex))
 				throw new ArgumentOutOfRangeException ("count");
-
-			CheckDisposed ();
-			CheckConnected ();
-			CheckAuthenticated ();
 
 			if (count == 0)
 				return new Stream[0];

@@ -3,8 +3,6 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{60B5D72B-8219-48B6-B688-AD0FE284A96A}</ProjectGuid>
     <ProjectTypeGuids>{FEACFBD2-3405-455C-9665-78FE426C6842};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <OutputType>Library</OutputType>
@@ -52,6 +50,10 @@
     <ProjectReference Include="..\submodules\MimeKit\MimeKit\MimeKit.iOS.csproj">
       <Project>{4C1288AD-12C8-4BF7-AED7-6C4DC539C856}</Project>
       <Name>MimeKit.iOS</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\submodules\MimeKit\submodules\bc-csharp\crypto\BouncyCastle.iOS.csproj">
+      <Project>{0249241C-205E-4AC0-828B-90F822359B9E}</Project>
+      <Name>BouncyCastle.iOS</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
@@ -125,6 +127,7 @@
     <Compile Include="Security\SaslMechanismPlain.cs" />
     <Compile Include="Security\SaslMechanismScramBase.cs" />
     <Compile Include="Security\SaslMechanismScramSha1.cs" />
+    <Compile Include="Security\SaslMechanismScramSha256.cs" />
     <Compile Include="Security\SecureSocketOptions.cs" />
     <Compile Include="AccessControl.cs" />
     <Compile Include="AccessControlList.cs" />
@@ -138,7 +141,9 @@
     <Compile Include="BodyPartMessage.cs" />
     <Compile Include="BodyPartMultipart.cs" />
     <Compile Include="BodyPartText.cs" />
+    <Compile Include="BodyPartVisitor.cs" />
     <Compile Include="CommandException.cs" />
+    <Compile Include="CompressedStream.cs" />
     <Compile Include="DeliveryStatusNotification.cs" />
     <Compile Include="DuplexStream.cs" />
     <Compile Include="Envelope.cs" />
@@ -177,6 +182,9 @@
     <Compile Include="MessagesVanishedEventArgs.cs" />
     <Compile Include="MessageThread.cs" />
     <Compile Include="MessageThreader.cs" />
+    <Compile Include="Metadata.cs" />
+    <Compile Include="MetadataCollection.cs" />
+    <Compile Include="MetadataTag.cs" />
     <Compile Include="NullProtocolLogger.cs" />
     <Compile Include="ProgressStream.cs" />
     <Compile Include="ProtocolException.cs" />
@@ -187,6 +195,7 @@
     <Compile Include="StatusItems.cs" />
     <Compile Include="ThreadingAlgorithm.cs" />
     <Compile Include="UniqueId.cs" />
+    <Compile Include="UniqueIdMap.cs" />
     <Compile Include="UniqueIdRange.cs" />
     <Compile Include="UniqueIdSet.cs" />
     <Compile Include="UriExtensions.cs" />

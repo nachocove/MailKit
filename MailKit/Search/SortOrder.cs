@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,12 @@ namespace MailKit.Search {
 	/// <remarks>
 	/// An enumeration of sort orders.
 	/// </remarks>
-	enum SortOrder {
+	public enum SortOrder {
+		/// <summary>
+		/// No sorting order.
+		/// </summary>
+		None,
+
 		/// <summary>
 		/// Sort in ascending order.
 		/// </summary>

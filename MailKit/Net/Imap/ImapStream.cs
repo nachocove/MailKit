@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -328,7 +328,7 @@ namespace MailKit.Net.Imap {
 
 			try {
 #if !NETFX_CORE
-				bool buffered = Stream is SslStream;
+				bool buffered = !(Stream is NetworkStream);
 #else
 				bool buffered = true;
 #endif
@@ -526,7 +526,7 @@ namespace MailKit.Net.Imap {
 
 				inputIndex = (int) (inptr - inbuf);
 
-#if !NETFX_CORE
+#if !NETFX_CORE && !COREFX
 				var buffer = memory.GetBuffer ();
 #else
 				var buffer = memory.ToArray ();

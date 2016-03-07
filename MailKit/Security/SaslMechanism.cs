@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,10 @@ using System;
 using System.Net;
 using System.Text;
 
+#if NETFX_CORE
+using Encoding = Portable.Text.Encoding;
+#endif
+
 namespace MailKit.Security {
 	/// <summary>
 	/// A SASL authentication mechanism.
@@ -48,7 +52,7 @@ namespace MailKit.Security {
 		/// which order the SASL mechanisms supported by the server should be tried.
 		/// </remarks>
 		public static readonly string[] AuthMechanismRank = {
-			"XOAUTH2", "SCRAM-SHA-1", "NTLM", "CRAM-MD5", "DIGEST-MD5", "PLAIN", "LOGIN"
+			"XOAUTH2", "SCRAM-SHA-256", "SCRAM-SHA-1", "NTLM", "CRAM-MD5", "DIGEST-MD5", "PLAIN", "LOGIN"
 		};
 
 		/// <summary>
@@ -172,15 +176,15 @@ namespace MailKit.Security {
 		/// </exception>
 		public string Challenge (string token)
 		{
-			byte[] decoded;
-			int length;
+			byte[] decoded = null;
+			int length = 0;
 
 			if (token != null) {
-				decoded = Convert.FromBase64String (token);
-				length = decoded.Length;
-			} else {
-				decoded = null;
-				length = 0;
+				try {
+					decoded = Convert.FromBase64String (token.Trim ());
+					length = decoded.Length;
+				} catch (FormatException) {
+				}
 			}
 
 			var challenge = Challenge (decoded, 0, length);
@@ -207,7 +211,7 @@ namespace MailKit.Security {
 		/// </summary>
 		/// <remarks>
 		/// Use this method to make sure that a SASL mechanism is supported before calling
-		/// <see cref="Create"/>.
+		/// <see cref="Create(string,Uri,ICredentials)"/>.
 		/// </remarks>
 		/// <returns><c>true</c> if the specified SASL mechanism is supported; otherwise, <c>false</c>.</returns>
 		/// <param name="mechanism">The name of the SASL mechanism.</param>
@@ -220,14 +224,65 @@ namespace MailKit.Security {
 				throw new ArgumentNullException ("mechanism");
 
 			switch (mechanism) {
-			case "SCRAM-SHA-1": return true;
-			case "DIGEST-MD5":  return true;
-			case "CRAM-MD5":    return true;
-			case "XOAUTH2":     return true;
-			case "PLAIN":       return true;
-			case "LOGIN":       return true;
-			case "NTLM":        return true;
-			default:            return false;
+			case "SCRAM-SHA-256": return true;
+			case "SCRAM-SHA-1":   return true;
+			case "DIGEST-MD5":    return true;
+			case "CRAM-MD5":      return true;
+			case "XOAUTH2":       return true;
+			case "PLAIN":         return true;
+			case "LOGIN":         return true;
+			case "NTLM":          return true;
+			default:              return false;
+			}
+		}
+
+		/// <summary>
+		/// Create an instance of the specified SASL mechanism using the uri and credentials.
+		/// </summary>
+		/// <remarks>
+		/// If unsure that a particular SASL mechanism is supported, you should first call
+		/// <see cref="IsSupported"/>.
+		/// </remarks>
+		/// <returns>An instance of the requested SASL mechanism if supported; otherwise <c>null</c>.</returns>
+		/// <param name="mechanism">The name of the SASL mechanism.</param>
+		/// <param name="uri">The URI of the service to authenticate against.</param>
+		/// <param name="encoding">The text encoding to use for the credentials.</param>
+		/// <param name="credentials">The user's credentials.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="mechanism"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="uri"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
+		/// </exception>
+		public static SaslMechanism Create (string mechanism, Uri uri, Encoding encoding, ICredentials credentials)
+		{
+			if (mechanism == null)
+				throw new ArgumentNullException ("mechanism");
+
+			if (uri == null)
+				throw new ArgumentNullException ("uri");
+
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
+			if (credentials == null)
+				throw new ArgumentNullException ("credentials");
+
+			switch (mechanism) {
+			//case "KERBEROS_V4":   return null;
+			case "SCRAM-SHA-256": return new SaslMechanismScramSha256 (uri, credentials);
+			case "SCRAM-SHA-1":   return new SaslMechanismScramSha1 (uri, credentials);
+			case "DIGEST-MD5":    return new SaslMechanismDigestMd5 (uri, credentials);
+			case "CRAM-MD5":      return new SaslMechanismCramMd5 (uri, credentials);
+			//case "GSSAPI":        return null;
+			case "XOAUTH2":       return new SaslMechanismOAuth2 (uri, credentials);
+			case "PLAIN":         return new SaslMechanismPlain (uri, encoding, credentials);
+			case "LOGIN":         return new SaslMechanismLogin (uri, encoding, credentials);
+			case "NTLM":          return new SaslMechanismNtlm (uri, credentials);
+			default:              return null;
 			}
 		}
 
@@ -251,27 +306,7 @@ namespace MailKit.Security {
 		/// </exception>
 		public static SaslMechanism Create (string mechanism, Uri uri, ICredentials credentials)
 		{
-			if (mechanism == null)
-				throw new ArgumentNullException ("mechanism");
-
-			if (uri == null)
-				throw new ArgumentNullException ("uri");
-
-			if (credentials == null)
-				throw new ArgumentNullException ("credentials");
-
-			switch (mechanism) {
-			//case "KERBEROS_V4": return null;
-			case "SCRAM-SHA-1": return new SaslMechanismScramSha1 (uri, credentials);
-			case "DIGEST-MD5":  return new SaslMechanismDigestMd5 (uri, credentials);
-			case "CRAM-MD5":    return new SaslMechanismCramMd5 (uri, credentials);
-			//case "GSSAPI":      return null;
-			case "XOAUTH2":     return new SaslMechanismOAuth2 (uri, credentials);
-			case "PLAIN":       return new SaslMechanismPlain (uri, credentials);
-			case "LOGIN":       return new SaslMechanismLogin (uri, credentials);
-			case "NTLM":        return new SaslMechanismNtlm (uri, credentials);
-			default:            return null;
-			}
+			return Create (mechanism, uri, Encoding.UTF8, credentials);
 		}
 
 		/// <summary>
@@ -445,7 +480,7 @@ namespace MailKit.Security {
 				}
 			}
 
-#if !NETFX_CORE
+#if !NETFX_CORE && !COREFX
 			return builder.ToString ().Normalize (NormalizationForm.FormKC);
 #else
 			return builder.ToString ();

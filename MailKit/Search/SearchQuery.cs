@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -385,7 +385,7 @@ namespace MailKit.Search {
 		/// </summary>
 		/// <remarks>
 		/// <para>Applies a fuzzy matching algorithm to the specified expression.</para>
-		/// <para>Note: This feature is not supported by all IMAP servers.</para>
+		/// <note type="warning">This feature is not supported by all IMAP servers.</note>
 		/// </remarks>
 		/// <returns>A <see cref="UnarySearchQuery"/>.</returns>
 		/// <param name="expr">The expression</param>

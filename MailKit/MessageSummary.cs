@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -142,9 +142,9 @@ namespace MailKit {
 				BodyPartText text = null;
 
 				if (multi != null) {
-					if (multi.ContentType.Matches ("multipart", "related")) {
+					if (multi.ContentType.IsMimeType ("multipart", "related")) {
 						text = GetMultipartRelatedRoot (multi) as BodyPartText;
-					} else if (multi.ContentType.Matches ("multipart", "alternative")) {
+					} else if (multi.ContentType.IsMimeType ("multipart", "alternative")) {
 						// Note: nested multipart/alternatives make no sense... yet here we are.
 						if (TryGetMultipartAlternativeBody (multi, html, out body))
 							return true;
@@ -169,10 +169,10 @@ namespace MailKit {
 			BodyPartMultipart multi;
 			BodyPartText text;
 
-			if (multipart.ContentType.Matches ("multipart", "alternative"))
+			if (multipart.ContentType.IsMimeType ("multipart", "alternative"))
 				return TryGetMultipartAlternativeBody (multipart, html, out body);
 
-			if (!multipart.ContentType.Matches ("multipart", "related")) {
+			if (!multipart.ContentType.IsMimeType ("multipart", "related")) {
 				// Note: This is probably a multipart/mixed... and if not, we can still treat it like it is.
 				for (int i = 0; i < multipart.BodyParts.Count; i++) {
 					multi = multipart.BodyParts[i] as BodyPartMultipart;

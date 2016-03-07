@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,10 @@ using System;
 using System.Net;
 using System.Text;
 
+#if NETFX_CORE
+using Encoding = Portable.Text.Encoding;
+#endif
+
 namespace MailKit.Security {
 	/// <summary>
 	/// The LOGIN SASL mechanism.
@@ -45,7 +49,32 @@ namespace MailKit.Security {
 			Password
 		}
 
+		Encoding encoding;
 		LoginState state;
+
+		/// <summary>
+		/// Initializes a new instance of the <see cref="MailKit.Security.SaslMechanismLogin"/> class.
+		/// </summary>
+		/// <remarks>
+		/// Creates a new LOGIN SASL context.
+		/// </remarks>
+		/// <param name="uri">The URI of the service.</param>
+		/// <param name="encoding">The encoding to use for the user's credentials.</param>
+		/// <param name="credentials">The user's credentials.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="uri"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
+		/// </exception>
+		public SaslMechanismLogin (Uri uri, Encoding encoding, ICredentials credentials) : base (uri, credentials)
+		{
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
+			this.encoding = encoding;
+		}
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MailKit.Security.SaslMechanismLogin"/> class.
@@ -62,6 +91,7 @@ namespace MailKit.Security {
 		/// </exception>
 		public SaslMechanismLogin (Uri uri, ICredentials credentials) : base (uri, credentials)
 		{
+			encoding = Encoding.UTF8;
 		}
 
 		/// <summary>
@@ -116,11 +146,11 @@ namespace MailKit.Security {
 
 			switch (state) {
 			case LoginState.UserName:
-				challenge = Encoding.UTF8.GetBytes (cred.UserName);
+				challenge = encoding.GetBytes (cred.UserName);
 				state = LoginState.Password;
 				break;
 			case LoginState.Password:
-				challenge = Encoding.UTF8.GetBytes (cred.Password);
+				challenge = encoding.GetBytes (cred.Password);
 				IsAuthenticated = true;
 				break;
 			default:

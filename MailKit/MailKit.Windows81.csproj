@@ -212,6 +212,7 @@
     <Compile Include="Security\SaslMechanismPlain.cs" />
     <Compile Include="Security\SaslMechanismScramBase.cs" />
     <Compile Include="Security\SaslMechanismScramSha1.cs" />
+    <Compile Include="Security\SaslMechanismScramSha256.cs" />
     <Compile Include="Security\SecureSocketOptions.cs" />
     <Compile Include="AccessControl.cs" />
     <Compile Include="AccessControlList.cs" />
@@ -225,7 +226,9 @@
     <Compile Include="BodyPartMessage.cs" />
     <Compile Include="BodyPartMultipart.cs" />
     <Compile Include="BodyPartText.cs" />
+    <Compile Include="BodyPartVisitor.cs" />
     <Compile Include="CommandException.cs" />
+    <Compile Include="CompressedStream.cs" />
     <Compile Include="DeliveryStatusNotification.cs" />
     <Compile Include="DuplexStream.cs" />
     <Compile Include="Envelope.cs" />
@@ -264,6 +267,9 @@
     <Compile Include="MessagesVanishedEventArgs.cs" />
     <Compile Include="MessageThread.cs" />
     <Compile Include="MessageThreader.cs" />
+    <Compile Include="Metadata.cs" />
+    <Compile Include="MetadataCollection.cs" />
+    <Compile Include="MetadataTag.cs" />
     <Compile Include="NullProtocolLogger.cs" />
     <Compile Include="ProgressStream.cs" />
     <Compile Include="ProtocolException.cs" />
@@ -274,6 +280,7 @@
     <Compile Include="StatusItems.cs" />
     <Compile Include="ThreadingAlgorithm.cs" />
     <Compile Include="UniqueId.cs" />
+    <Compile Include="UniqueIdMap.cs" />
     <Compile Include="UniqueIdRange.cs" />
     <Compile Include="UniqueIdSet.cs" />
     <Compile Include="UriExtensions.cs" />

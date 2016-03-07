@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,6 +26,7 @@
 
 using System;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -34,6 +35,8 @@ using System.Collections.Generic;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using SslProtocols = System.Security.Authentication.SslProtocols;
+#else
+using Encoding = Portable.Text.Encoding;
 #endif
 
 using MailKit.Security;
@@ -80,11 +83,8 @@ namespace MailKit {
 		/// <remarks>
 		/// Initializes a new instance of the <see cref="MailKit.MailService"/> class.
 		/// </remarks>
-		protected MailService ()
+		protected MailService () : this (new NullProtocolLogger ())
 		{
-#if !NETFX_CORE
-			SslProtocols = DefaultSslProtocols;
-#endif
 		}
 
 		/// <summary>
@@ -213,6 +213,17 @@ namespace MailKit {
 		}
 
 		/// <summary>
+		/// Get whether or not the connection is secure (typically via SSL or TLS).
+		/// </summary>
+		/// <remarks>
+		/// Gets whether or not the connection is secure (typically via SSL or TLS).
+		/// </remarks>
+		/// <value><c>true</c> if the connection is secure; otherwise, <c>false</c>.</value>
+		public abstract bool IsSecure {
+			get;
+		}
+
+		/// <summary>
 		/// Get whether or not the client is currently authenticated with the mail server.
 		/// </summary>
 		/// <remarks>
@@ -237,6 +248,56 @@ namespace MailKit {
 		public abstract int Timeout {
 			get; set;
 		}
+
+#if !NETFX_CORE
+		/// <summary>
+		/// The default server certificate validation callback used when connecting via SSL or TLS.
+		/// </summary>
+		/// <remarks>
+		/// <para>The default server certificate validation callback considers self-signed certificates to be
+		/// valid so long as the only error in the certificate chain is an untrusted root.</para>
+		/// <note type="security">It should be noted that self-signed certificates may be an indication of
+		/// a man-in-the-middle (MITM) attack and so it is recommended that the client implement a custom
+		/// server certificate validation callback that presents the certificate to the user in some way,
+		/// allowing the user to confirm or deny its validity.</note>
+		/// </remarks>
+		/// <returns><c>true</c> if the certificate is deemed valid; otherwise, <c>false</c>.</returns>
+		/// <param name="sender">The object that is connecting via SSL or TLS.</param>
+		/// <param name="certificate">The server's SSL certificate.</param>
+		/// <param name="chain">The server's SSL certificate chain.</param>
+		/// <param name="sslPolicyErrors">The SSL policy errors.</param>
+		public static bool DefaultServerCertificateValidationCallback (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+		{
+			if (sslPolicyErrors == SslPolicyErrors.None)
+				return true;
+
+			// if there are errors in the certificate chain, look at each error to determine the cause
+			if ((sslPolicyErrors & SslPolicyErrors.RemoteCertificateChainErrors) != 0) {
+				if (chain != null && chain.ChainStatus != null) {
+					foreach (var status in chain.ChainStatus) {
+						if ((certificate.Subject == certificate.Issuer) && (status.Status == X509ChainStatusFlags.UntrustedRoot)) {
+							// treat self-signed certificates with an untrusted root as valid since they are so
+							// common among mail server installations
+							continue;
+						}
+
+						if (status.Status != X509ChainStatusFlags.NoError) {
+							// if there are any other errors in the certificate chain, the certificate is invalid,
+							// so return false
+							return false;
+						}
+					}
+				}
+
+				// Note: If we get this far, then the only errors in the certificate chain are untrusted root errors for
+				// self-signed certificates. Since self-signed certificates are so common for mail server installations,
+				// treat the certificate as valid.
+				return true;
+			}
+
+			return false;
+		}
+#endif
 
 		/// <summary>
 		/// Establish a connection to the specified mail server.
@@ -453,7 +514,18 @@ namespace MailKit {
 		/// Establish a connection to the specified mail server.
 		/// </summary>
 		/// <remarks>
-		/// Establishes a connection to the specified mail server.
+		/// <para>Establishes a connection to the specified mail server.</para>
+		/// <note type="note">
+		/// <para>The <paramref name="useSsl"/> argument only controls whether or
+		/// not the client makes an SSL-wrapped connection. In other words, even if the
+		/// <paramref name="useSsl"/> parameter is <c>false</c>, SSL/TLS may still be used if
+		/// the mail server supports the STARTTLS extension.</para>
+		/// <para>To disable all use of SSL/TLS, use the
+		/// <see cref="Connect(string,int,MailKit.Security.SecureSocketOptions,System.Threading.CancellationToken)"/>
+		/// overload with a value of
+		/// <see cref="MailKit.Security.SecureSocketOptions.None">SecureSocketOptions.None</see>
+		/// instead.</para>
+		/// </note>
 		/// </remarks>
 		/// <param name="host">The host to connect to.</param>
 		/// <param name="port">The port to connect to. If the specified port is <c>0</c>, then the default port will be used.</param>
@@ -501,7 +573,18 @@ namespace MailKit {
 		/// Asynchronously establish a connection to the specified mail server.
 		/// </summary>
 		/// <remarks>
-		/// Asynchronously establishes a connection to the specified mail server.
+		/// <para>Asynchronously establishes a connection to the specified mail server.</para>
+		/// <note type="note">
+		/// <para>The <paramref name="useSsl"/> argument only controls whether or
+		/// not the client makes an SSL-wrapped connection. In other words, even if the
+		/// <paramref name="useSsl"/> parameter is <c>false</c>, SSL/TLS may still be used if
+		/// the mail server supports the STARTTLS extension.</para>
+		/// <para>To disable all use of SSL/TLS, use the
+		/// <see cref="ConnectAsync(string,int,MailKit.Security.SecureSocketOptions,System.Threading.CancellationToken)"/>
+		/// overload with a value of
+		/// <see cref="MailKit.Security.SecureSocketOptions.None">SecureSocketOptions.None</see>
+		/// instead.</para>
+		/// </note>
 		/// </remarks>
 		/// <returns>An asynchronous task context.</returns>
 		/// <param name="host">The host to connect to.</param>
@@ -557,11 +640,115 @@ namespace MailKit {
 		/// the credentials are used to authenticate.</para>
 		/// <para>If the server does not support SASL or if no common SASL mechanisms
 		/// can be found, then the default login command is used as a fallback.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling any of the
-		/// <a href="Overload_MailKit_MailService_Authenticate.htm">Authenticate</a>
-		/// methods.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
+		/// </remarks>
+		/// <param name="encoding">The encoding to use for the user's credentials.</param>
+		/// <param name="credentials">The user's credentials.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="MailService"/> has been disposed.
+		/// </exception>
+		/// <exception cref="System.InvalidOperationException">
+		/// The <see cref="MailService"/> is not connected or is already authenticated.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation was canceled via the cancellation token.
+		/// </exception>
+		/// <exception cref="MailKit.Security.AuthenticationException">
+		/// Authentication using the supplied credentials has failed.
+		/// </exception>
+		/// <exception cref="MailKit.Security.SaslException">
+		/// A SASL authentication error occurred.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="ProtocolException">
+		/// A protocol error occurred.
+		/// </exception>
+		public abstract void Authenticate (Encoding encoding, ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken));
+
+		/// <summary>
+		/// Asynchronously authenticates using the supplied credentials.
+		/// </summary>
+		/// <remarks>
+		/// <para>If the server supports one or more SASL authentication mechanisms,
+		/// then the SASL mechanisms that both the client and server support are tried
+		/// in order of greatest security to weakest security. Once a SASL
+		/// authentication mechanism is found that both client and server support,
+		/// the credentials are used to authenticate.</para>
+		/// <para>If the server does not support SASL or if no common SASL mechanisms
+		/// can be found, then the default login command is used as a fallback.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
+		/// </remarks>
+		/// <returns>An asynchronous task context.</returns>
+		/// <param name="encoding">The encoding to use for the user's credentials.</param>
+		/// <param name="credentials">The user's credentials.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="credentials"/> is <c>null</c>.</para>
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="MailService"/> has been disposed.
+		/// </exception>
+		/// <exception cref="System.InvalidOperationException">
+		/// The <see cref="MailService"/> is not connected or is already authenticated.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation was canceled via the cancellation token.
+		/// </exception>
+		/// <exception cref="MailKit.Security.AuthenticationException">
+		/// Authentication using the supplied credentials has failed.
+		/// </exception>
+		/// <exception cref="MailKit.Security.SaslException">
+		/// A SASL authentication error occurred.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="ProtocolException">
+		/// A protocol error occurred.
+		/// </exception>
+		public virtual Task AuthenticateAsync (Encoding encoding, ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
+			if (credentials == null)
+				throw new ArgumentNullException ("credentials");
+
+			return Task.Factory.StartNew (() => {
+				lock (SyncRoot) {
+					Authenticate (encoding, credentials, cancellationToken);
+				}
+			}, cancellationToken, TaskCreationOptions.None, TaskScheduler.Default);
+		}
+
+		/// <summary>
+		/// Authenticates using the supplied credentials.
+		/// </summary>
+		/// <remarks>
+		/// <para>If the server supports one or more SASL authentication mechanisms,
+		/// then the SASL mechanisms that both the client and server support are tried
+		/// in order of greatest security to weakest security. Once a SASL
+		/// authentication mechanism is found that both client and server support,
+		/// the credentials are used to authenticate.</para>
+		/// <para>If the server does not support SASL or if no common SASL mechanisms
+		/// can be found, then the default login command is used as a fallback.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
 		/// </remarks>
 		/// <param name="credentials">The user's credentials.</param>
 		/// <param name="cancellationToken">The cancellation token.</param>
@@ -589,7 +776,10 @@ namespace MailKit {
 		/// <exception cref="ProtocolException">
 		/// A protocol error occurred.
 		/// </exception>
-		public abstract void Authenticate (ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken));
+		public void Authenticate (ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			Authenticate (Encoding.UTF8, credentials, cancellationToken);
+		}
 
 		/// <summary>
 		/// Asynchronously authenticates using the supplied credentials.
@@ -602,11 +792,9 @@ namespace MailKit {
 		/// the credentials are used to authenticate.</para>
 		/// <para>If the server does not support SASL or if no common SASL mechanisms
 		/// can be found, then the default login command is used as a fallback.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling any of the
-		/// <a href="Overload_MailKit_MailService_Authenticate.htm">Authenticate</a>
-		/// methods.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
 		/// </remarks>
 		/// <returns>An asynchronous task context.</returns>
 		/// <param name="credentials">The user's credentials.</param>
@@ -635,16 +823,12 @@ namespace MailKit {
 		/// <exception cref="ProtocolException">
 		/// A protocol error occurred.
 		/// </exception>
-		public virtual Task AuthenticateAsync (ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
+		public Task AuthenticateAsync (ICredentials credentials, CancellationToken cancellationToken = default (CancellationToken))
 		{
 			if (credentials == null)
 				throw new ArgumentNullException ("credentials");
 
-			return Task.Factory.StartNew (() => {
-				lock (SyncRoot) {
-					Authenticate (credentials, cancellationToken);
-				}
-			}, cancellationToken, TaskCreationOptions.None, TaskScheduler.Default);
+			return AuthenticateAsync (Encoding.UTF8, credentials, cancellationToken);
 		}
 
 		/// <summary>
@@ -658,11 +842,136 @@ namespace MailKit {
 		/// the credentials are used to authenticate.</para>
 		/// <para>If the server does not support SASL or if no common SASL mechanisms
 		/// can be found, then the default login command is used as a fallback.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling any of the
-		/// <a href="Overload_MailKit_MailService_Authenticate.htm">Authenticate</a>
-		/// methods.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
+		/// </remarks>
+		/// <param name="encoding">The encoding to use for the user's credentials.</param>
+		/// <param name="userName">The user name.</param>
+		/// <param name="password">The password.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="userName"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="password"/> is <c>null</c>.</para>
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="MailService"/> has been disposed.
+		/// </exception>
+		/// <exception cref="System.InvalidOperationException">
+		/// The <see cref="MailService"/> is not connected or is already authenticated.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation was canceled via the cancellation token.
+		/// </exception>
+		/// <exception cref="MailKit.Security.AuthenticationException">
+		/// Authentication using the supplied credentials has failed.
+		/// </exception>
+		/// <exception cref="MailKit.Security.SaslException">
+		/// A SASL authentication error occurred.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="ProtocolException">
+		/// A protocol error occurred.
+		/// </exception>
+		public void Authenticate (Encoding encoding, string userName, string password, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
+			if (userName == null)
+				throw new ArgumentNullException ("userName");
+
+			if (password == null)
+				throw new ArgumentNullException ("password");
+
+			var credentials = new NetworkCredential (userName, password);
+
+			Authenticate (encoding, credentials, cancellationToken);
+		}
+
+		/// <summary>
+		/// Asynchronously authenticates using the specified user name and password.
+		/// </summary>
+		/// <remarks>
+		/// <para>If the server supports one or more SASL authentication mechanisms,
+		/// then the SASL mechanisms that both the client and server support are tried
+		/// in order of greatest security to weakest security. Once a SASL
+		/// authentication mechanism is found that both client and server support,
+		/// the credentials are used to authenticate.</para>
+		/// <para>If the server does not support SASL or if no common SASL mechanisms
+		/// can be found, then the default login command is used as a fallback.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
+		/// </remarks>
+		/// <returns>An asynchronous task context.</returns>
+		/// <param name="encoding">The encoding to use for the user's credentials.</param>
+		/// <param name="userName">The user name.</param>
+		/// <param name="password">The password.</param>
+		/// <param name="cancellationToken">The cancellation token.</param>
+		/// <exception cref="System.ArgumentNullException">
+		/// <para><paramref name="encoding"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="userName"/> is <c>null</c>.</para>
+		/// <para>-or-</para>
+		/// <para><paramref name="password"/> is <c>null</c>.</para>
+		/// </exception>
+		/// <exception cref="System.ObjectDisposedException">
+		/// The <see cref="MailService"/> has been disposed.
+		/// </exception>
+		/// <exception cref="System.InvalidOperationException">
+		/// The <see cref="MailService"/> is not connected or is already authenticated.
+		/// </exception>
+		/// <exception cref="System.OperationCanceledException">
+		/// The operation was canceled via the cancellation token.
+		/// </exception>
+		/// <exception cref="MailKit.Security.AuthenticationException">
+		/// Authentication using the supplied credentials has failed.
+		/// </exception>
+		/// <exception cref="MailKit.Security.SaslException">
+		/// A SASL authentication error occurred.
+		/// </exception>
+		/// <exception cref="System.IO.IOException">
+		/// An I/O error occurred.
+		/// </exception>
+		/// <exception cref="ProtocolException">
+		/// A protocol error occurred.
+		/// </exception>
+		public Task AuthenticateAsync (Encoding encoding, string userName, string password, CancellationToken cancellationToken = default (CancellationToken))
+		{
+			if (encoding == null)
+				throw new ArgumentNullException ("encoding");
+
+			if (userName == null)
+				throw new ArgumentNullException ("userName");
+
+			if (password == null)
+				throw new ArgumentNullException ("password");
+
+			var credentials = new NetworkCredential (userName, password);
+
+			return AuthenticateAsync (encoding, credentials, cancellationToken);
+		}
+
+		/// <summary>
+		/// Authenticates using the specified user name and password.
+		/// </summary>
+		/// <remarks>
+		/// <para>If the server supports one or more SASL authentication mechanisms,
+		/// then the SASL mechanisms that both the client and server support are tried
+		/// in order of greatest security to weakest security. Once a SASL
+		/// authentication mechanism is found that both client and server support,
+		/// the credentials are used to authenticate.</para>
+		/// <para>If the server does not support SASL or if no common SASL mechanisms
+		/// can be found, then the default login command is used as a fallback.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
 		/// </remarks>
 		/// <example>
 		/// <code language="c#" source="Examples\SmtpExamples.cs" region="SendMessage"/>
@@ -706,7 +1015,7 @@ namespace MailKit {
 
 			var credentials = new NetworkCredential (userName, password);
 
-			Authenticate (credentials, cancellationToken);
+			Authenticate (Encoding.UTF8, credentials, cancellationToken);
 		}
 
 		/// <summary>
@@ -720,11 +1029,9 @@ namespace MailKit {
 		/// the credentials are used to authenticate.</para>
 		/// <para>If the server does not support SASL or if no common SASL mechanisms
 		/// can be found, then the default login command is used as a fallback.</para>
-		/// <para>Note: To prevent the usage of certain authentication mechanisms,
-		/// simply remove them from the the <see cref="AuthenticationMechanisms"/> hash
-		/// set before calling any of the
-		/// <a href="Overload_MailKit_MailService_Authenticate.htm">Authenticate</a>
-		/// methods.</para>
+		/// <note type="tip">To prevent the usage of certain authentication mechanisms,
+		/// simply remove them from the <see cref="AuthenticationMechanisms"/> hash set
+		/// before calling this method.</note>
 		/// </remarks>
 		/// <returns>An asynchronous task context.</returns>
 		/// <param name="userName">The user name.</param>
@@ -766,7 +1073,7 @@ namespace MailKit {
 
 			var credentials = new NetworkCredential (userName, password);
 
-			return AuthenticateAsync (credentials, cancellationToken);
+			return AuthenticateAsync (Encoding.UTF8, credentials, cancellationToken);
 		}
 
 		/// <summary>

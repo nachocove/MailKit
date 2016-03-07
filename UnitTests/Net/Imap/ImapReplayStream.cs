@@ -92,6 +92,7 @@ namespace UnitTests.Net.Imap {
 		readonly IList<ImapReplayCommand> commands;
 		readonly bool testUnixFormat;
 		ImapReplayState state;
+		int timeout = 100000;
 		Stream stream;
 		bool disposed;
 		int index;
@@ -124,6 +125,10 @@ namespace UnitTests.Net.Imap {
 			get { return true; }
 		}
 
+		public override bool CanTimeout {
+			get { return true; }
+		}
+
 		public override long Length {
 			get { return stream.Length; }
 		}
@@ -133,11 +138,25 @@ namespace UnitTests.Net.Imap {
 			set { throw new NotSupportedException (); }
 		}
 
+		public override int ReadTimeout {
+			get { return timeout; }
+			set { timeout = value; }
+		}
+
+		public override int WriteTimeout {
+			get { return timeout; }
+			set { timeout = value; }
+		}
+
 		public override int Read (byte[] buffer, int offset, int count)
 		{
 			CheckDisposed ();
 
-			Assert.AreEqual (ImapReplayState.SendResponse, state, "Trying to read when no command given.");
+			if (state != ImapReplayState.SendResponse) {
+				var command = Latin1.GetString (sent.GetBuffer (), 0, (int) sent.Length);
+
+				Assert.AreEqual (ImapReplayState.SendResponse, state, "Trying to read before command received. Sent so far: {0}", command);
+			}
 			Assert.IsNotNull (stream, "Trying to read when no data available.");
 
 			int nread = stream.Read (buffer, offset, count);

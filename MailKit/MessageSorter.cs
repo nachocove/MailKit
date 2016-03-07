@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -132,6 +132,12 @@ namespace MailKit {
 					case OrderByType.To:
 						cmp = CompareMailboxAddresses (x.Envelope.To, y.Envelope.To);
 						break;
+					case OrderByType.ModSeq:
+						var xmodseq = x.ModSeq ?? 0;
+						var ymodseq = y.ModSeq ?? 0;
+
+						cmp = xmodseq.CompareTo (ymodseq);
+						break;
 					}
 
 					if (cmp == 0)
@@ -153,7 +159,7 @@ namespace MailKit {
 		/// Sorts the messages by the specified ordering.
 		/// </remarks>
 		/// <returns>The sorted messages.</returns>
-		/// <typeparam name="T">The message items must implement the <see cref="ISortable"/> interface.</typeparam>
+		/// <typeparam name="T">The message items must implement the <see cref="IMessageSummary"/> interface.</typeparam>
 		/// <param name="messages">The messages to sort.</param>
 		/// <param name="orderBy">The sort ordering.</param>
 		/// <exception cref="System.ArgumentNullException">
@@ -202,7 +208,7 @@ namespace MailKit {
 		/// Sorts the messages by the specified ordering.
 		/// </remarks>
 		/// <returns>The sorted messages.</returns>
-		/// <typeparam name="T">The message items must implement the <see cref="ISortable"/> interface.</typeparam>
+		/// <typeparam name="T">The message items must implement the <see cref="IMessageSummary"/> interface.</typeparam>
 		/// <param name="messages">The messages to sort.</param>
 		/// <param name="orderBy">The sort ordering.</param>
 		/// <exception cref="System.ArgumentNullException">

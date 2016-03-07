@@ -65,6 +65,8 @@
     <Compile Include="Security\SaslMechanismTests.cs" />
     <Compile Include="BodyPartTests.cs" />
     <Compile Include="UniqueIdSetTests.cs" />
+    <Compile Include="UniqueIdTests.cs" />
+    <Compile Include="UniqueIdRangeTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Net\Imap\Resources\acl\authenticate.txt" />
@@ -204,6 +206,7 @@
     <EmbeddedResource Include="Net\Imap\Resources\gmail\fetch.50.txt" />
     <EmbeddedResource Include="Net\Imap\Resources\gmail\go-ahead.txt" />
     <EmbeddedResource Include="Net\Imap\Resources\gmail\greeting.txt" />
+    <EmbeddedResource Include="Net\Imap\Resources\gmail\list-all.txt" />
     <EmbeddedResource Include="Net\Imap\Resources\gmail\list-inbox.txt" />
     <EmbeddedResource Include="Net\Imap\Resources\gmail\list-personal.txt" />
     <EmbeddedResource Include="Net\Imap\Resources\gmail\list-unittests.txt" />
@@ -253,11 +256,14 @@
     <EmbeddedResource Include="Net\Smtp\Resources\comcast-ehlo+pipelining.txt" />
     <EmbeddedResource Include="Net\Smtp\Resources\comcast-greeting.txt" />
     <EmbeddedResource Include="Net\Smtp\Resources\comcast-mail-from.txt" />
+    <EmbeddedResource Include="Net\Smtp\Resources\comcast-noop.txt" />
     <EmbeddedResource Include="Net\Smtp\Resources\comcast-quit.txt" />
     <EmbeddedResource Include="Net\Smtp\Resources\comcast-rcpt-to.txt" />
     <EmbeddedResource Include="Net\Smtp\Resources\comcast-rset.txt" />
     <EmbeddedResource Include="Net\Smtp\Resources\mailbox-unavailable.txt" />
     <EmbeddedResource Include="Net\Smtp\Resources\pipelined-mail-from-rcpt-to.txt" />
+    <EmbeddedResource Include="Net\Smtp\Resources\rfc0821-expn.txt" />
+    <EmbeddedResource Include="Net\Smtp\Resources\rfc0821-vrfy.txt" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Net\" />

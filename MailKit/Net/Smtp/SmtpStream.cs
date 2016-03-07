@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -54,8 +54,8 @@ namespace MailKit.Net.Smtp {
 	/// </remarks>
 	class SmtpStream : Stream, ICancellableStream
 	{
-		static readonly Encoding UTF8 = Encoding.GetEncoding (65001, new EncoderExceptionFallback (), new DecoderExceptionFallback ());
-		static readonly Encoding Latin1 = Encoding.GetEncoding (28591);
+		static readonly Encoding Latin1;
+		static readonly Encoding UTF8;
 		const int ReadAheadSize = 128;
 		const int BlockSize = 4096;
 		const int PadSize = 4;
@@ -71,6 +71,17 @@ namespace MailKit.Net.Smtp {
 		int inputIndex = ReadAheadSize;
 		int inputEnd = ReadAheadSize;
 		bool disposed;
+
+		static SmtpStream ()
+		{
+			UTF8 = Encoding.GetEncoding (65001, new EncoderExceptionFallback (), new DecoderExceptionFallback ());
+
+			try {
+				Latin1 = Encoding.GetEncoding (28591);
+			} catch (NotSupportedException) {
+				Latin1 = Encoding.GetEncoding (1252);
+			}
+		}
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MailKit.Net.Smtp.SmtpStream"/> class.
@@ -288,7 +299,7 @@ namespace MailKit.Net.Smtp {
 
 			try {
 #if !NETFX_CORE
-				bool buffered = Stream is SslStream;
+				bool buffered = !(Stream is NetworkStream);
 #else
 				bool buffered = true;
 #endif
@@ -527,13 +538,13 @@ namespace MailKit.Net.Smtp {
 				string message = null;
 
 				try {
-#if !NETFX_CORE
+#if !NETFX_CORE && !COREFX
 					message = UTF8.GetString (memory.GetBuffer (), 0, (int) memory.Length);
 #else
 					message = UTF8.GetString (memory.ToArray (), 0, (int) memory.Length);
 #endif
 				} catch (DecoderFallbackException) {
-#if !NETFX_CORE
+#if !NETFX_CORE && !COREFX
 					message = Latin1.GetString (memory.GetBuffer (), 0, (int) memory.Length);
 #else
 					message = Latin1.GetString (memory.ToArray (), 0, (int) memory.Length);

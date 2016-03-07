@@ -7,7 +7,7 @@
 //
 // Copyright (c) 2003 Motus Technologies Inc. (http://www.motus.com)
 // Copyright (c) 2004 Novell (http://www.novell.com)
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // References
 // a.	NTLM Authentication Scheme for HTTP, Ronald Tschalär
@@ -118,8 +118,6 @@ namespace MailKit.Security.Ntlm {
 						Array.Clear (data, 0, data.Length);
 						Array.Clear (hash, 0, hash.Length);
 					}
-
-					des.Clear ();
 				}
 			}
 		}

@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -64,11 +64,23 @@ namespace MailKit.Net.Pop3 {
 	/// </summary>
 	class Pop3Engine
 	{
-		static readonly Encoding UTF8 = Encoding.GetEncoding (65001, new EncoderExceptionFallback (), new DecoderExceptionFallback ());
-		static readonly Encoding Latin1 = Encoding.GetEncoding (28591);
+		static readonly Encoding Latin1;
+		static readonly Encoding UTF8;
+
 		readonly List<Pop3Command> queue;
 		Pop3Stream stream;
 		int nextId;
+
+		static Pop3Engine ()
+		{
+			UTF8 = Encoding.GetEncoding (65001, new EncoderExceptionFallback (), new DecoderExceptionFallback ());
+
+			try {
+				Latin1 = Encoding.GetEncoding (28591);
+			} catch (NotSupportedException) {
+				Latin1 = Encoding.GetEncoding (1252);
+			}
+		}
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="MailKit.Net.Pop3.Pop3Engine"/> class.
@@ -309,7 +321,7 @@ namespace MailKit.Net.Pop3 {
 				memory.Write (buf, offset, count);
 
 				count = (int) memory.Length;
-#if !NETFX_CORE
+#if !NETFX_CORE && !COREFX
 				buf = memory.GetBuffer ();
 #else
 				buf = memory.ToArray ();
@@ -365,7 +377,7 @@ namespace MailKit.Net.Pop3 {
 
 		void SendCommand (Pop3Command pc)
 		{
-			var buf = Encoding.UTF8.GetBytes (pc.Command + "\r\n");
+			var buf = pc.Encoding.GetBytes (pc.Command + "\r\n");
 
 			stream.Write (buf, 0, buf.Length);
 		}
@@ -443,12 +455,17 @@ namespace MailKit.Net.Pop3 {
 			return active[active.Count - 1].Id;
 		}
 
-		public Pop3Command QueueCommand (CancellationToken cancellationToken, Pop3CommandHandler handler, string format, params object[] args)
+		public Pop3Command QueueCommand (CancellationToken cancellationToken, Pop3CommandHandler handler, Encoding encoding, string format, params object[] args)
 		{
-			var pc = new Pop3Command (cancellationToken, handler, format, args);
+			var pc = new Pop3Command (cancellationToken, handler, encoding, format, args);
 			pc.Id = nextId++;
 			queue.Add (pc);
 			return pc;
+		}
+
+		public Pop3Command QueueCommand (CancellationToken cancellationToken, Pop3CommandHandler handler, string format, params object[] args)
+		{
+			return QueueCommand (cancellationToken, handler, Encoding.ASCII, format, args);
 		}
 
 		static void CapaHandler (Pop3Engine engine, Pop3Command pc, string text)

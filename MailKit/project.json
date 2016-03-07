@@ -1,0 +1,51 @@
+﻿{
+  "version": "1.3.0-beta7",
+  "title": "MailKit",
+  "description": "An Open Source cross-platform .NET mail-client library that is based on MimeKit and optimized for mobile devices.",
+  "authors": [ "Jeffrey Stedfast" ],
+  "tags": [ "smtp", "pop3", "imap", "mime", "security", "dkim", "smime", "s/mime", "openpgp", "pgp", "mbox", "mail", "email", "parser", "tnef", "xamarin", "android", "ios", "monodroid", "monotouch", "net40", "net45", "dnxcore50", "wpa81" ],
+  "projectUrl": "https://github.com/jstedfast/MailKit",
+  "licenseUrl": "https://github.com/jstedfast/MailKit/blob/master/License.md",
+  "language": "en-US",
+
+  "frameworks": {
+    "dotnet55": {
+      "compilationOptions": {
+        "define": [ "COREFX" ],
+        "allowUnsafe": true
+      },
+      "dependencies": {
+        "System.Security.Cryptography.Algorithms": "4.0.0-beta-23516",
+        "System.Security.Cryptography.Primitives": "4.0.0-beta-23516",
+        "System.Runtime.Serialization.Primitives": "4.1.0-beta-23516",
+        "System.Text.Encoding.Extensions": "4.0.11-beta-23516",
+        "System.Text.Encoding.CodePages": "4.0.1-beta-23516",
+        "System.Text.Encoding": "4.0.11-beta-23516",
+        "System.Net.NameResolution": "4.0.0-beta-23516",
+        "System.Net.NetworkInformation": "4.1.0-beta-23516",
+        "System.Net.Primitives": "4.0.11-beta-23516",
+        "System.Net.Security": "4.0.0-beta-23516",
+        "System.Net.Sockets": "4.1.0-beta-23516",
+        "System.IO.Compression": "4.1.0-beta-23516",
+        "System.Collections": "4.0.11-beta-23516",
+        "System.Data.Common": "4.0.1-beta-23516",
+        "System.Reflection": "4.1.0-beta-23516",
+        "System.Threading": "4.0.11-beta-23516",
+        "System.Runtime": "4.0.21-beta-23516",
+        "System.Linq": "4.0.1-beta-23516",
+        "Microsoft.CSharp": "4.0.1-beta-23516"
+      }
+    }
+  },
+  "compileExclude": [
+    "Net/SelectMode.cs",
+    "Security/KeyedHashAlgorithm.cs",
+    "Security/RandomNumberGenerator.cs",
+    "MailKit.*.project.json",
+    "packages.*.config"
+  ],
+  "dependencies": {
+    "MimeKit": "1.3.0-beta7",
+    "Portable.BouncyCastle": "1.8.1"
+  }
+}

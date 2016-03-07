@@ -3,7 +3,7 @@
 //
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 //
-// Copyright (c) 2013-2015 Xamarin Inc. (www.xamarin.com)
+// Copyright (c) 2013-2016 Xamarin Inc. (www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -81,7 +81,8 @@ namespace MailKit.Net.Imap {
 	enum ImapStringType {
 		Atom,
 		QString,
-		Literal
+		Literal,
+		Nil
 	}
 
 	/// <summary>
@@ -252,18 +253,15 @@ namespace MailKit.Net.Imap {
 		public long Length {
 			get {
 				if (Type == ImapLiteralType.String)
-					return (long) ((byte[]) Literal).Length;
+					return ((byte[]) Literal).Length;
 
 				using (var measure = new MeasuringStream ()) {
-					switch (Type) {
-					case ImapLiteralType.Stream:
+					if (Type == ImapLiteralType.Stream) {
 						var stream = (Stream) Literal;
 						stream.CopyTo (measure, 4096);
 						stream.Position = 0;
-						break;
-					case ImapLiteralType.MimeMessage:
+					} else {
 						((MimeMessage) Literal).WriteTo (format, measure);
-						break;
 					}
 
 					return measure.Length;
@@ -334,6 +332,8 @@ namespace MailKit.Net.Imap {
 	/// </summary>
 	class ImapCommand
 	{
+		static readonly byte[] Nil = new byte[] { (byte) 'N', (byte) 'I', (byte) 'L' };
+
 		public Dictionary<string, ImapUntaggedHandler> UntaggedHandlers { get; private set; }
 		public ImapContinuationHandler ContinuationHandler { get; set; }
 		public CancellationToken CancellationToken { get; private set; }
@@ -487,6 +487,9 @@ namespace MailKit.Net.Imap {
 		{
 			var type = allowAtom ? ImapStringType.Atom : ImapStringType.QString;
 
+			if (value == null)
+				return ImapStringType.Nil;
+
 			if (value.Length == 0)
 				return ImapStringType.QString;
 
@@ -534,6 +537,9 @@ namespace MailKit.Net.Imap {
 			case ImapStringType.Atom:
 				buf = Encoding.UTF8.GetBytes (value);
 				builder.Write (buf, 0, buf.Length);
+				break;
+			case ImapStringType.Nil:
+				builder.Write (Nil, 0, Nil.Length);
 				break;
 			}
 		}
@@ -667,7 +673,7 @@ namespace MailKit.Net.Imap {
 						case "BAD": result = ImapCommandResponse.Bad; break;
 						case "OK": result = ImapCommandResponse.Ok; break;
 						case "NO": result = ImapCommandResponse.No; break;
-						default: throw ImapEngine.UnexpectedToken (token, false);
+						default: throw ImapEngine.UnexpectedToken ("Syntax error in tagged response. Unexpected token: {0}", token);
 						}
 
 						token = Engine.ReadToken (CancellationToken);
@@ -684,7 +690,7 @@ namespace MailKit.Net.Imap {
 						}
 					} else {
 						// looks like we didn't get an "OK", "NO", or "BAD"...
-						throw ImapEngine.UnexpectedToken (token, false);
+						throw ImapEngine.UnexpectedToken ("Syntax error in tagged response. Unexpected token: {0}", token);
 					}
 				} else if (token.Type == ImapTokenType.OpenBracket) {
 					// Note: this is a work-around for broken IMAP servers like Office365.com that
@@ -694,7 +700,7 @@ namespace MailKit.Net.Imap {
 					RespCodes.Add (code);
 				} else {
 					// no clue what we got...
-					throw ImapEngine.UnexpectedToken (token, false);
+					throw ImapEngine.UnexpectedToken ("Syntax error in response. Unexpected token: {0}", token);
 				}
 			} while (true);
 

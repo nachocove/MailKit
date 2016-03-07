@@ -16,7 +16,7 @@
                 <para>SASL Authentication</para>
                 <list class="bullet">
                   <listItem>
-                    <para>Supports the CRAM-MD5, DIGEST-MD5, LOGIN, NTLM, PLAIN, SCRAM-SHA-1, and XOAUTH2 mechanisms.</para>
+                    <para>Supports the CRAM-MD5, DIGEST-MD5, LOGIN, NTLM, PLAIN, SCRAM-SHA-1, SCRAM-SHA-256, and XOAUTH2 mechanisms.</para>
                   </listItem>
                 </list>
               </listItem>
@@ -60,10 +60,10 @@
                 <para>Supports SSL and TLS</para>
               </listItem>
               <listItem>
-                <para>Supports the ACL, QUOTA, LITERAL+, IDLE, NAMESPACE, ID, CHILDREN, LOGINDISABLED, STARTTLS
+                <para>Supports the ACL, QUOTA, LITERAL+, IDLE, NAMESPACE, ID, CHILDREN, LOGINDISABLED, STARTTLS,
                 MULTIAPPEND, UNSELECT, UIDPLUS, CONDSTORE, ESEARCH, SASL-ID, COMPRESS, WITHIN, ENABLE, QRESYNC,
-                SORT, THREAD, ESORT, SPECIAL-USE, SEARCH=FUZZY, MOVE, UTF8=ACCEPT, UTF8=ONLY, XLIST, and the
-                Google Mail extensions.</para>
+                SORT, THREAD, ESORT, METADATA, LIST-STATUS, SPECIAL-USE, CREATE-SPECIAL-USE, SEARCH=FUZZY, MOVE,
+                UTF8=ACCEPT, UTF8=ONLY, XLIST, and the Google Mail extensions.</para>
               </listItem>
             </list>
           </listItem>
@@ -142,7 +142,7 @@
             <linkUri>http://jeffreystedfast.blogspot.com/2013/10/optimization-tips-tricks-used-by.html</linkUri>
             <linkTarget>_blank</linkTarget>
           </externalLink>], MimeKit's performance is actually <externalLink>
-            <linkText>par with GMime</linkText>
+            <linkText>on par with GMime</linkText>
             <linkUri>http://jeffreystedfast.blogspot.com/2014/03/gmime-gets-speed-boost.html</linkUri>
             <linkTarget>_blank</linkTarget>
           </externalLink>.

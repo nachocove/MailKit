@@ -1,5 +1,70 @@
 # Release Notes
 
+### MailKit 1.3.0
+
+* Added support for dnxcore50.
+
+### MailKit 1.2.20
+
+* Added a work-around for GoDaddy's ASP.NET web host which does not support the iso-8859-1
+  System.Text.Encoding (used as a fallback encoding within MailKit) by falling back to
+  Windows-1252 instead.
+* Improved NTLM support.
+
+### MailKit 1.2.19
+
+* Added support for the SMTP VRFY and EXPN commands.
+
+### MailKit 1.2.18
+
+* If the IMAP server sends a `* ID NIL` response, return null for ImapClient.Identify().
+* Allow developers to override the charset used when authenticating. (issue #292)
+
+### MailKit 1.2.17
+
+* Exposed MailKit.Search.OrderByType and MailKit.Search.SortOrder to the public API.
+* Modified IMailFolder.CopyTo() and MoveTo() to return a UniqueIdMap instead of a UniqueIdSet.
+* Improved ImapProtocolException error messages to be more informative.
+* Added an IsSecure property to ImapClient, Pop3Client and SmtpClient.
+* Fixed support for the IMAP COMPRESS=DEFLATE extension to work properly.
+* Modified UniqueId.Id and .Validity to be properties instead of fields.
+* Reduced memory usage for UniqueIdRange (-33%) and UniqueIdSet (-50%).
+* Vastly improved the performance of UniqueIdSet (~2x).
+* Added an ImapClient.GetFolders() overload that also requests the status of each folder.
+* Modified the headersOnly parameter to the various Pop3Client.GetStream() methods to default to
+  false instead of forcing developers to pass in a value.
+* Updated the IMAP, POP3 and SMTP clients to be stricter with validating SSL certificates.
+
+### MailKit 1.2.16
+
+* Added support for the SCRAM-SHA-256 SASL mechanism.
+* Added support for the CREATE-SPECIAL-USE IMAP extension.
+* Added support for the METADATA IMAP extension.
+* Added support for the LIST-STATUS IMAP extension.
+
+### MailKit 1.2.15
+
+* Be more forgiving during SASL auth when a POP3 server sends unexpected text after a + response.
+  (issue #268)
+
+### MailKit 1.2.14
+
+* Fixed ImapFolder.Search() to not capitalize the date strings in date queries. (issue #252)
+* Fixed filtering logic in ImapFolder.GetSubfolders() to not filter out subfolders named Inbox.
+  (issue #255)
+* Exposed SmtpClient.ProcessRcptToResponse() as virtual protected to allow subclasses to override
+  error handling. (issue #256)
+* Modified SmtpCommandException .ctors to be public and fixed serialization logic. (issue #257)
+* Added workaround for broken smtp.sina.com mail server.
+* Throw a custom ImapProtocolException on "* BYE" during connection instead of "unexpected token".
+  (issue #262)
+
+### MailKit 1.2.13
+
+* Fixed SmtpClient to not double dispose the socket.
+* Added a BodyPartVisitor class.
+* Fixed ImapFolder to allow NIL tokens for body parts. (issue #244)
+
 ### MailKit 1.2.12
 
 * Allow developers to specify a local IPEndPoint to use for connecting to remote servers.
