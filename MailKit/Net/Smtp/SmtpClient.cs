@@ -325,7 +325,20 @@ namespace MailKit.Net.Smtp {
 			queued.Add (type);
 		}
 
-		void FlushCommandQueue (MailboxAddress sender, IList<MailboxAddress> recipients, CancellationToken cancellationToken)
+		/// <summary>
+		/// Invoked only when no recipients were accepted by the SMTP server.
+		/// </summary>
+		/// <remarks>
+		/// If <see cref="OnRecipientNotAccepted"/> is overridden to not throw
+		/// an exception, this method should be overridden to throw an appropriate
+		/// exception instead.
+		/// </remarks>
+		/// <param name="message">The message being sent.</param>
+		protected virtual void OnNoRecipientsAccepted (MimeMessage message)
+		{
+		}
+
+		void FlushCommandQueue (MimeMessage message, MailboxAddress sender, IList<MailboxAddress> recipients, CancellationToken cancellationToken)
 		{
 			if (queued.Count == 0)
 				return;
@@ -333,6 +346,7 @@ namespace MailKit.Net.Smtp {
 			try {
 				var responses = new List<SmtpResponse> ();
 				Exception rex = null;
+				int count = 0;
 				int rcpt = 0;
 
 				// Note: queued commands are buffered by the stream
@@ -352,13 +366,17 @@ namespace MailKit.Net.Smtp {
 				for (int i = 0; i < responses.Count; i++) {
 					switch (queued[i]) {
 					case SmtpCommand.MailFrom:
-						ProcessMailFromResponse (responses[i], sender);
+						ProcessMailFromResponse (message, sender, responses[i]);
 						break;
 					case SmtpCommand.RcptTo:
-						ProcessRcptToResponse (responses[i], recipients[rcpt++]);
+						if (ProcessRcptToResponse (message, recipients[rcpt++], responses[i]))
+							count++;
 						break;
 					}
 				}
+
+				if (count == 0)
+					OnNoRecipientsAccepted (message);
 
 				if (rex != null)
 					throw new SmtpProtocolException ("Error reading a response from the SMTP server.", rex);
@@ -1181,18 +1199,27 @@ namespace MailKit.Net.Smtp {
 			return message.From.Mailboxes.FirstOrDefault ();
 		}
 
+		static void AddUnique (IList<MailboxAddress> recipients, HashSet<string> unique, IEnumerable<MailboxAddress> mailboxes)
+		{
+			foreach (var mailbox in mailboxes) {
+				if (unique.Add (mailbox.Address))
+					recipients.Add (mailbox);
+			}
+		}
+
 		static IList<MailboxAddress> GetMessageRecipients (MimeMessage message)
 		{
+			var unique = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
 			var recipients = new List<MailboxAddress> ();
 
 			if (message.ResentSender != null || message.ResentFrom.Count > 0) {
-				recipients.AddRange (message.ResentTo.Mailboxes);
-				recipients.AddRange (message.ResentCc.Mailboxes);
-				recipients.AddRange (message.ResentBcc.Mailboxes);
+				AddUnique (recipients, unique, message.ResentTo.Mailboxes);
+				AddUnique (recipients, unique, message.ResentCc.Mailboxes);
+				AddUnique (recipients, unique, message.ResentBcc.Mailboxes);
 			} else {
-				recipients.AddRange (message.To.Mailboxes);
-				recipients.AddRange (message.Cc.Mailboxes);
-				recipients.AddRange (message.Bcc.Mailboxes);
+				AddUnique (recipients, unique, message.To.Mailboxes);
+				AddUnique (recipients, unique, message.Cc.Mailboxes);
+				AddUnique (recipients, unique, message.Bcc.Mailboxes);
 			}
 
 			return recipients;
@@ -1247,14 +1274,43 @@ namespace MailKit.Net.Smtp {
 			}
 		}
 
-		static void ProcessMailFromResponse (SmtpResponse response, MailboxAddress mailbox)
+		/// <summary>
+		/// Invoked when the sender is accepted by the SMTP server.
+		/// </summary>
+		/// <remarks>
+		/// The default implementation does nothing.
+		/// </remarks>
+		/// <param name="message">The message being sent.</param>
+		/// <param name="mailbox">The mailbox used in the <c>MAIL FROM</c> command.</param>
+		/// <param name="response">The response to the <c>MAIL FROM</c> command.</param>
+		protected virtual void OnSenderAccepted (MimeMessage message, MailboxAddress mailbox, SmtpResponse response)
+		{
+		}
+
+		/// <summary>
+		/// Invoked when a recipient is not accepted by the SMTP server.
+		/// </summary>
+		/// <remarks>
+		/// The default implementation throws an appropriate <see cref="SmtpCommandException"/>.
+		/// </remarks>
+		/// <param name="message">The message being sent.</param>
+		/// <param name="mailbox">The mailbox used in the <c>MAIL FROM</c> command.</param>
+		/// <param name="response">The response to the <c>MAIL FROM</c> command.</param>
+		protected virtual void OnSenderNotAccepted (MimeMessage message, MailboxAddress mailbox, SmtpResponse response)
+		{
+			throw new SmtpCommandException (SmtpErrorCode.SenderNotAccepted, response.StatusCode, mailbox, response.Response);
+		}
+
+		void ProcessMailFromResponse (MimeMessage message, MailboxAddress mailbox, SmtpResponse response)
 		{
 			switch (response.StatusCode) {
 			case SmtpStatusCode.Ok:
+				OnSenderAccepted (message, mailbox, response);
 				break;
 			case SmtpStatusCode.MailboxNameNotAllowed:
 			case SmtpStatusCode.MailboxUnavailable:
-				throw new SmtpCommandException (SmtpErrorCode.SenderNotAccepted, response.StatusCode, mailbox, response.Response);
+				OnSenderNotAccepted (message, mailbox, response);
+				break;
 			case SmtpStatusCode.AuthenticationRequired:
 				throw new ServiceNotAuthenticatedException (response.Response);
 			default:
@@ -1307,33 +1363,51 @@ namespace MailKit.Net.Smtp {
 				return;
 			}
 
-			ProcessMailFromResponse (SendCommand (command, cancellationToken), mailbox);
+			var response = SendCommand (command, cancellationToken);
+
+			ProcessMailFromResponse (message, mailbox, response);
 		}
 
 		/// <summary>
-		/// Process the response to a RCPT TO command.
+		/// Invoked when a recipient is accepted by the SMTP server.
 		/// </summary>
 		/// <remarks>
-		/// <para>Processes the response to a RCPT TO command.</para>
-		/// <para>By default, this method no-op when the <paramref name="response"/>
-		/// <see cref="SmtpResponse.StatusCode"/> property has a value of
-		/// <see cref="SmtpStatusCode.Ok"/> or
-		/// <see cref="SmtpStatusCode.UserNotLocalWillForward"/> and will throw
-		/// an appropriate exception for all other status codes.</para>
+		/// The default implementation does nothing.
 		/// </remarks>
-		/// <param name="response">The response to an RCPT TO command.</param>
-		/// <param name="mailbox">The mailbox used in the RCPT TO command.</param>
-		protected virtual void ProcessRcptToResponse (SmtpResponse response, MailboxAddress mailbox)
+		/// <param name="message">The message being sent.</param>
+		/// <param name="mailbox">The mailbox used in the <c>RCPT TO</c> command.</param>
+		/// <param name="response">The response to the <c>RCPT TO</c> command.</param>
+		protected virtual void OnRecipientAccepted (MimeMessage message, MailboxAddress mailbox, SmtpResponse response)
+		{
+		}
+
+		/// <summary>
+		/// Invoked when a recipient is not accepted by the SMTP server.
+		/// </summary>
+		/// <remarks>
+		/// The default implementation throws an appropriate <see cref="SmtpCommandException"/>.
+		/// </remarks>
+		/// <param name="message">The message being sent.</param>
+		/// <param name="mailbox">The mailbox used in the <c>RCPT TO</c> command.</param>
+		/// <param name="response">The response to the <c>RCPT TO</c> command.</param>
+		protected virtual void OnRecipientNotAccepted (MimeMessage message, MailboxAddress mailbox, SmtpResponse response)
+		{
+			throw new SmtpCommandException (SmtpErrorCode.RecipientNotAccepted, response.StatusCode, mailbox, response.Response);
+		}
+
+		bool ProcessRcptToResponse (MimeMessage message, MailboxAddress mailbox, SmtpResponse response)
 		{
 			switch (response.StatusCode) {
 			case SmtpStatusCode.UserNotLocalWillForward:
 			case SmtpStatusCode.Ok:
-				break;
+				OnRecipientAccepted (message, mailbox, response);
+				return true;
 			case SmtpStatusCode.UserNotLocalTryAlternatePath:
 			case SmtpStatusCode.MailboxNameNotAllowed:
 			case SmtpStatusCode.MailboxUnavailable:
 			case SmtpStatusCode.MailboxBusy:
-				throw new SmtpCommandException (SmtpErrorCode.RecipientNotAccepted, response.StatusCode, mailbox, response.Response);
+				OnRecipientNotAccepted (message, mailbox, response);
+				return false;
 			case SmtpStatusCode.AuthenticationRequired:
 				throw new ServiceNotAuthenticatedException (response.Response);
 			default:
@@ -1393,7 +1467,9 @@ namespace MailKit.Net.Smtp {
 				return;
 			}
 
-			ProcessRcptToResponse (SendCommand (command, cancellationToken), mailbox);
+			var response = SendCommand (command, cancellationToken);
+
+			ProcessRcptToResponse (message, mailbox, response);
 		}
 
 		class SendContext
@@ -1555,16 +1631,13 @@ namespace MailKit.Net.Smtp {
 				// queue their commands instead of sending them immediately.
 				MailFrom (message, sender, extensions, cancellationToken);
 
-				var unique = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
-				foreach (var recipient in recipients) {
-					if (unique.Add (recipient.Address))
-						RcptTo (message, recipient, cancellationToken);
-				}
+				for (int i = 0; i < recipients.Count; i++)
+					RcptTo (message, recipients[i], cancellationToken);
 
 				// Note: if PIPELINING is supported, this will flush all outstanding
 				// MAIL FROM and RCPT TO commands to the server and then process all
 				// of their responses.
-				FlushCommandQueue (sender, recipients, cancellationToken);
+				FlushCommandQueue (message, sender, recipients, cancellationToken);
 
 				if ((extensions & SmtpExtension.BinaryMime) != 0)
 					Bdat (format, message, cancellationToken, progress);
@@ -1719,7 +1792,10 @@ namespace MailKit.Net.Smtp {
 			if (recipients == null)
 				throw new ArgumentNullException ("recipients");
 
-			var rcpts = recipients.ToList ();
+			var unique = new HashSet<string> (StringComparer.OrdinalIgnoreCase);
+			var rcpts = new List<MailboxAddress> ();
+
+			AddUnique (rcpts, unique, recipients);
 
 			if (rcpts.Count == 0)
 				throw new InvalidOperationException ("No recipients have been specified.");
